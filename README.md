@@ -9,7 +9,7 @@ A local "second brain" for developers. Gnostis indexes your projects with tree-s
 - Stores embeddings locally using `chromem-go`.
 - Supports Ollama and OpenAI-compatible APIs for embeddings.
 - Maintains a dedicated symbol index for fast exact symbol lookups.
-- Answers semantic search queries from Cursor/Windsurf via MCP tools including `grep`, `list_files`, `directory_tree`, `get_recent_changes`, and `query_documentation`.
+- Exposes MCP tools: `search_codebase`, `find_symbol`, `get_file_context`, `list_projects`, `grep`, `list_files`, `directory_tree`, `get_recent_changes`, `query_documentation`, `add_project`, `remove_project`, `rebuild_index`, `get_index_status`.
 
 ## Quick links
 
@@ -21,29 +21,73 @@ A local "second brain" for developers. Gnostis indexes your projects with tree-s
 
 ## Quick start
 
-Gnostis runs as an HTTP-only MCP server managed by a systemd user unit.
+Gnostis runs as a **stdio MCP server** — the MCP client (Cursor, Windsurf, Devin) manages the process lifecycle.
 
-```bash
-lota build       # build ./gnostis with the short git commit hash as version
-lota install     # install ~/.local/bin/gnostis, ~/.gnostis/config.yaml and the systemd user unit
+### Option 1: `go run` (no install needed)
+
+Add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "gnostis": {
+      "command": "go",
+      "args": ["run", "github.com/quonaro/GnostisMCP/cmd/gnostis@latest"]
+    }
+  }
+}
 ```
 
-The daemon listens on `http://127.0.0.1:8080/mcp` (override with `GNOSTIS_PORT`).
+### Option 2: Pre-built binary
 
 ```bash
-systemctl --user status gnostis    # check daemon status
-systemctl --user stop gnostis      # stop the daemon
-systemctl --user restart gnostis   # restart the daemon
+go install github.com/quonaro/GnostisMCP/cmd/gnostis@latest
 ```
 
-## CLI
+Then add to your MCP client config:
 
-Gnostis embeds the Lota task runner. Run `gnostis` without arguments to see help.
-
-```bash
-gnostis run      # start the HTTP MCP server in the foreground
-gnostis install  # install ~/.local/bin/gnostis and the systemd user unit
-gnostis config   # print config with secrets masked
+```json
+{
+  "mcpServers": {
+    "gnostis": {
+      "command": "gnostis"
+    }
+  }
+}
 ```
 
-Use `get_index_status`, `rebuild_project`, `rebuild_index`, `discover_projects`, `add_project`, and `remove_project` MCP tools to manage indexing and projects.
+## Configuration
+
+On first run, Gnostis creates a default config at `~/.gnostis/config.yaml`:
+
+```yaml
+embeddings:
+  provider: ollama
+  url: http://localhost:11434/v1
+  model: nomic-embed-text
+  batch_size: 32
+
+directories: []
+```
+
+Add directories to index by editing the config or using the `add_project` MCP tool:
+
+```yaml
+directories:
+  - path: /home/user/projects/myapp
+    name: myapp
+```
+
+See [docs/config.md](docs/config.md) for all options.
+
+## How it works
+
+1. The MCP client spawns `gnostis` as a stdio subprocess.
+2. Gnostis opens the persistent embedding store from `~/.gnostis/data/`.
+3. Background goroutines index configured directories and watch for file changes.
+4. MCP tools serve semantic search, symbol lookup, and file context queries over stdin/stdout.
+5. When the client closes stdin, Gnostis shuts down gracefully.
+
+## Logs
+
+Logs are written to `~/.gnostis/gnostis.log` and stderr.
