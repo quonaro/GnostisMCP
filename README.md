@@ -32,7 +32,7 @@ Add to your MCP client config:
   "mcpServers": {
     "gnostis": {
       "command": "go",
-      "args": ["run", "github.com/quonaro/GnostisMCP/cmd/gnostis@latest"]
+      "args": ["run", "github.com/quonaro/gnostis/cmd/gnostis@latest"]
     }
   }
 }
@@ -41,7 +41,7 @@ Add to your MCP client config:
 ### Option 2: Pre-built binary
 
 ```bash
-go install github.com/quonaro/GnostisMCP/cmd/gnostis@latest
+go install github.com/quonaro/gnostis/cmd/gnostis@v0.0.18
 ```
 
 Then add to your MCP client config:
