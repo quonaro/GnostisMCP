@@ -260,13 +260,7 @@ func (s *Server) addProject(ctx context.Context, request mcp.CallToolRequest, ar
 		return toolError(errReasonSearchFailed, err.Error(), "try again later or check the path"), nil
 	}
 
-	jobID, err := s.indexer.StartRebuildProject(ctx, name)
-	if err != nil {
-		slog.ErrorContext(ctx, "add_project: start rebuild failed", "project", name, "error", err)
-		return toolError(errReasonSearchFailed, err.Error(), "try again later or check the project name"), nil
-	}
-
-	return mcp.NewToolResultText(fmt.Sprintf(`{"added":true,"job_id":%q}`, jobID)), nil
+	return mcp.NewToolResultText(fmt.Sprintf(`{"added":true,"name":%q,"hint":"use rebuild_project to index"}`, name)), nil
 }
 
 type removeProjectArgs struct {

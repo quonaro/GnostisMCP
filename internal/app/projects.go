@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/quonaro/gnostis/internal/config"
 	"github.com/quonaro/gnostis/internal/directory"
 	"github.com/quonaro/gnostis/internal/discover"
@@ -91,8 +89,9 @@ func (a *App) DiscoverProjects(ctx context.Context, root string, opts discover.O
 	return discover.FindProjects(root, opts, existing)
 }
 
-// AddProject adds a new directory to the config, reloads the project list, and
-// returns the assigned project name.
+// AddProject saves a project JSON file to the projects directory and updates
+// the in-memory project list. It does not start indexing — call
+// StartRebuildProject separately to index the project.
 func (a *App) AddProject(ctx context.Context, path, name string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is required")
@@ -124,14 +123,25 @@ func (a *App) AddProject(ctx context.Context, path, name string) (string, error)
 	name = uniqueProjectName(name, a.projects)
 
 	d := config.Directory{Path: absPath, Name: name}
+
+	// Save the project as an individual JSON file.
+	projectsDir := a.cfg.ProjectsDirPath
+	if projectsDir == "" {
+		resolved, err := config.ResolvePath(a.ConfigPath)
+		if err != nil {
+			return "", fmt.Errorf("resolve config path: %w", err)
+		}
+		projectsDir = config.ProjectsDir(resolved)
+	}
+	if err := config.SaveProjectFile(projectsDir, d); err != nil {
+		return "", fmt.Errorf("save project file: %w", err)
+	}
+
 	a.cfg.Directories = append(a.cfg.Directories, d)
 	a.dirs = append(a.dirs, directory.FromConfig(a.cfg.Index, d))
 	a.projects = append(a.projects, project.New(name, absPath))
 	a.updateSnapshots(a.cfg, a.projects)
 
-	if err := a.saveConfig(); err != nil {
-		return "", fmt.Errorf("save config: %w", err)
-	}
 	if a.mcp != nil {
 		a.mcp.ReloadProjects(a.projects)
 	}
@@ -172,7 +182,20 @@ func (a *App) RemoveProject(ctx context.Context, name string) error {
 	a.projects = append(a.projects[:idx], a.projects[idx+1:]...)
 	a.updateSnapshots(a.cfg, a.projects)
 
-	// Remove from config.
+	// Remove the project JSON file.
+	projectsDir := a.cfg.ProjectsDirPath
+	if projectsDir == "" {
+		resolved, err := config.ResolvePath(a.ConfigPath)
+		if err != nil {
+			return fmt.Errorf("resolve config path: %w", err)
+		}
+		projectsDir = config.ProjectsDir(resolved)
+	}
+	if err := config.DeleteProjectFile(projectsDir, name); err != nil {
+		return fmt.Errorf("delete project file: %w", err)
+	}
+
+	// Remove from in-memory config directories.
 	cfgIdx := -1
 	for i, d := range a.cfg.Directories {
 		if d.Name == name {
@@ -184,9 +207,6 @@ func (a *App) RemoveProject(ctx context.Context, name string) error {
 		a.cfg.Directories = append(a.cfg.Directories[:cfgIdx], a.cfg.Directories[cfgIdx+1:]...)
 	}
 
-	if err := a.saveConfig(); err != nil {
-		return fmt.Errorf("save config: %w", err)
-	}
 	if a.mcp != nil {
 		a.mcp.ReloadProjects(a.projects)
 	}
@@ -210,30 +230,4 @@ func uniqueProjectName(name string, projects []project.Project) string {
 			return candidate
 		}
 	}
-}
-
-func (a *App) saveConfig() error {
-	path := a.ConfigPath
-	if path == "" {
-		resolved, err := config.ResolvePath("")
-		if err != nil {
-			return fmt.Errorf("resolve config path: %w", err)
-		}
-		path = resolved
-	}
-
-	data, err := yaml.Marshal(a.cfg)
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-	return nil
 }

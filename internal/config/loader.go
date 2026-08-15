@@ -56,6 +56,43 @@ func Load(path string) (Config, error) {
 
 	applyDefaults(&cfg)
 	slog.Debug("applied config defaults", "data_dir", cfg.DataDir, "provider", cfg.Embeddings.Provider, "model", cfg.Embeddings.Model)
+
+	// Load per-project JSON files and merge them into Directories.
+	projectsDir := ProjectsDir(path)
+	cfg.ProjectsDirPath = projectsDir
+	fileDirs, err := LoadProjectFiles(projectsDir)
+	if err != nil {
+		slog.Warn("load project files", "dir", projectsDir, "error", err)
+	}
+
+	// Migration: if there are inline directories in config.yaml but no
+	// project JSON files yet, migrate them to individual JSON files.
+	if len(fileDirs) == 0 && len(cfg.Directories) > 0 {
+		for _, d := range cfg.Directories {
+			if err := SaveProjectFile(projectsDir, d); err != nil {
+				slog.Warn("migrate project to file", "name", d.Name, "error", err)
+			}
+		}
+		slog.Info("migrated inline directories to project files", "count", len(cfg.Directories), "dir", projectsDir)
+	}
+
+	if len(fileDirs) > 0 {
+		// Deduplicate by path: project JSON files take precedence over
+		// inline directories from config.yaml.
+		seen := make(map[string]bool, len(fileDirs))
+		for _, d := range fileDirs {
+			seen[d.Path] = true
+		}
+		var merged []Directory
+		merged = append(merged, fileDirs...)
+		for _, d := range cfg.Directories {
+			if !seen[d.Path] {
+				merged = append(merged, d)
+			}
+		}
+		cfg.Directories = merged
+	}
+
 	if err := validate(&cfg); err != nil {
 		slog.Error("config validation failed", "error", err)
 		return Config{}, fmt.Errorf("validate config: %w", err)

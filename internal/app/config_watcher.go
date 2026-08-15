@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -14,13 +16,15 @@ import (
 	"github.com/quonaro/gnostis/internal/watcher"
 )
 
-// watchConfig watches the config file for changes and reloads the configuration.
+// watchConfig watches the config file and the projects directory for changes
+// and reloads the configuration.
 func (a *App) watchConfig(ctx context.Context) error {
 	if a.ConfigPath == "" {
 		return nil
 	}
 
 	cfgDir := filepath.Dir(a.ConfigPath)
+	projectsDir := config.ProjectsDir(a.ConfigPath)
 
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -31,8 +35,22 @@ func (a *App) watchConfig(ctx context.Context) error {
 	if err := fw.Add(cfgDir); err != nil {
 		return fmt.Errorf("watch config directory %s: %w", cfgDir, err)
 	}
+	// Best-effort: watch the projects directory if it exists.
+	if _, statErr := os.Stat(projectsDir); statErr == nil {
+		if err := fw.Add(projectsDir); err != nil {
+			slog.WarnContext(ctx, "watch projects directory", "dir", projectsDir, "error", err)
+		}
+	} else {
+		// Create the directory so we can watch it — it will be created on
+		// first project save anyway.
+		if mkErr := os.MkdirAll(projectsDir, 0o755); mkErr == nil {
+			if err := fw.Add(projectsDir); err != nil {
+				slog.WarnContext(ctx, "watch projects directory", "dir", projectsDir, "error", err)
+			}
+		}
+	}
 
-	slog.InfoContext(ctx, "watching config file", "path", a.ConfigPath)
+	slog.InfoContext(ctx, "watching config file", "path", a.ConfigPath, "projects_dir", projectsDir)
 
 	var debounce *time.Timer
 	reset := func() {
@@ -60,13 +78,22 @@ func (a *App) watchConfig(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			if filepath.Base(event.Name) != filepath.Base(a.ConfigPath) {
+			// React to config.yaml changes.
+			if filepath.Base(event.Name) == filepath.Base(a.ConfigPath) {
+				if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 && event.Op&fsnotify.Rename == 0 {
+					continue
+				}
+				reset()
 				continue
 			}
-			if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 && event.Op&fsnotify.Rename == 0 {
+			// React to project JSON file changes in the projects directory.
+			if filepath.Dir(event.Name) == projectsDir && strings.HasSuffix(event.Name, ".json") {
+				if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 && event.Op&fsnotify.Remove == 0 && event.Op&fsnotify.Rename == 0 {
+					continue
+				}
+				reset()
 				continue
 			}
-			reset()
 		case <-func() <-chan time.Time {
 			if debounce == nil {
 				return nil

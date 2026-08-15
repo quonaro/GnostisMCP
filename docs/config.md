@@ -114,6 +114,38 @@ List of indexing roots. Each entry supports:
 - `exclude`: excluded globs; merged with defaults.
 - `max_file_size_mb`: files larger than this are skipped.
 
+Inline `directories` entries in `config.yaml` are still supported for backward compatibility. On first load, if no project JSON files exist yet, inline entries are automatically migrated to individual JSON files (see [Per-project files](#per-project-files) below).
+
+### Per-project files
+
+Individual projects are stored as JSON files in the `~/.gnostis/projects/` directory (next to `config.yaml`). Each file is named `<project-name>.json` and contains a single project configuration:
+
+```json
+{
+  "path": "/home/user/projects/myapp",
+  "name": "myapp",
+  "extensions": [],
+  "include": [],
+  "exclude": [],
+  "max_file_size_mb": 5,
+  "auto": false,
+  "depth": 0,
+  "discover": {
+    "git": false,
+    "go": false,
+    "node_modules": false,
+    "venv": false,
+    "workspace": false
+  }
+}
+```
+
+The `add_project` MCP tool creates a JSON file in this directory **without** starting indexing. To index the project, call `rebuild_project` separately. This allows adding many projects quickly and indexing them in a controlled manner.
+
+The `remove_project` MCP tool deletes the JSON file and removes indexed chunks.
+
+Changes to the `projects/` directory are detected at runtime and trigger an automatic config reload.
+
 ### `mcp`
 
 Gnostis only supports the `streamable-http` MCP transport. The endpoint is `/mcp`.

@@ -109,7 +109,7 @@ func TestAddProject(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("unexpected error result: %v", res.Content)
 	}
-	if extractText(t, res) != `{"added":true,"job_id":"job-1"}` {
+	if extractText(t, res) != `{"added":true,"name":"foo","hint":"use rebuild_project to index"}` {
 		t.Errorf("unexpected result: %s", extractText(t, res))
 	}
 }

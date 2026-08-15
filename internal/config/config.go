@@ -9,6 +9,11 @@ type Config struct {
 	Directories []Directory `yaml:"directories"`
 	Memory      Memory      `yaml:"memory"`
 	MCP         MCP         `yaml:"mcp"`
+
+	// ProjectsDirPath is the resolved path to the per-project JSON files
+	// directory. It is not serialized into config.yaml — it is derived from
+	// the config file location at load time.
+	ProjectsDirPath string `yaml:"-"`
 }
 
 // Embeddings configures the embedding provider.
