@@ -2,21 +2,16 @@ package main
 
 import (
 	"context"
-	_ "embed"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 
-	"github.com/quonaro/lota/engine"
-
+	"github.com/quonaro/gnostis/internal/app"
+	"github.com/quonaro/gnostis/internal/config"
 	"github.com/quonaro/gnostis/internal/log"
 )
-
-//go:embed cli.yml
-var cliYAML []byte
 
 // version is set by the build linker to the short git commit hash.
 var version string
@@ -59,30 +54,28 @@ func setupLogOutput() io.Writer {
 
 func main() {
 	logOutput = setupLogOutput()
-	logger := slog.New(log.NewHandler(logOutput, slog.LevelInfo))
-	slog.SetDefault(logger)
+	slog.SetDefault(slog.New(log.NewHandler(logOutput, slog.LevelInfo)))
 
-	builder := engine.NewBuilder("gnostis", cliYAML)
-	builder.RegisterNative("run", runHandler)
-	builder.RegisterNative("decrypt-cascade", decryptCascadeHandler)
-
-	app, err := builder.Build()
+	cfg, err := loadConfig()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	if len(os.Args) < 2 {
-		app.PrintHelp()
-		return
+	application, err := app.New(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "initialize app: %v\n", err)
+		os.Exit(1)
 	}
 
-	if err := app.Run(context.Background(), os.Args[1:]); err != nil {
-		var groupErr *engine.GroupError
-		if errors.As(err, &groupErr) {
-			app.PrintGroupHelp(groupErr.Groups)
-			return
-		}
+	cfgPath, err := config.ResolvePath("")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve config path: %v\n", err)
+		os.Exit(1)
+	}
+	application.ConfigPath = cfgPath
+
+	if err := application.Run(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "run: %v\n", err)
 		os.Exit(1)
 	}
