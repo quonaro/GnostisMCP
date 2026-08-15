@@ -84,12 +84,6 @@ func (s *Server) searchCodebase(ctx context.Context, request mcp.CallToolRequest
 	}
 	slog.DebugContext(ctx, "search_codebase results", "count", len(results))
 
-	if len(results) == 0 {
-		if notReady := s.indexNotReadyError(); notReady != nil {
-			return notReady, nil
-		}
-	}
-
 	items := make([]searchResultItem, len(results))
 	for i, r := range results {
 		items[i] = searchResultItem{

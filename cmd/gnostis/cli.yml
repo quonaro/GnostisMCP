@@ -1,13 +1,5 @@
 run:
-  desc: Start the Gnostis server
-  native: true
-
-install:
-  desc: Install gnostis as a systemd user service
-  native: true
-
-config:
-  desc: Show interpolated config with secrets masked
+  desc: Start the Gnostis MCP server (stdio)
   native: true
 
 decrypt-cascade:

@@ -144,8 +144,6 @@ func (a *App) ReloadConfig(ctx context.Context) error {
 	// Preserve runtime settings that cannot be changed without a restart.
 	cfg.DataDir = a.cfg.DataDir
 	cfg.Embeddings = a.cfg.Embeddings
-	cfg.MCP.Address = a.cfg.MCP.Address
-	cfg.MCP.Token = a.cfg.MCP.Token
 	if cfg.MCP.Version == "" {
 		cfg.MCP.Version = a.cfg.MCP.Version
 	}

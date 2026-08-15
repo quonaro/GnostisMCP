@@ -140,12 +140,6 @@ func (s *Server) queryDocumentation(ctx context.Context, request mcp.CallToolReq
 		return toolError(errReasonSearchFailed, err.Error(), "try again later or check the index status"), nil
 	}
 
-	if len(results) == 0 {
-		if notReady := s.indexNotReadyError(); notReady != nil {
-			return notReady, nil
-		}
-	}
-
 	items := make([]searchResultItem, len(results))
 	for i, r := range results {
 		items[i] = searchResultItem{

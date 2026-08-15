@@ -10,7 +10,6 @@ require (
 require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/mark3labs/mcp-go v0.56.0
-	github.com/mattn/go-isatty v0.0.22
 	github.com/philippgille/chromem-go v0.7.0
 	github.com/quonaro/lota v1.17.7
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
@@ -25,6 +24,7 @@ require (
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/posener/complete/v2 v2.1.0 // indirect
 	github.com/posener/script v1.2.0 // indirect

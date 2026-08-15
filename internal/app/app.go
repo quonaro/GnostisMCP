@@ -14,7 +14,6 @@ import (
 	"github.com/quonaro/gnostis/internal/directory"
 	"github.com/quonaro/gnostis/internal/embeddings"
 	"github.com/quonaro/gnostis/internal/indexer"
-	"github.com/quonaro/gnostis/internal/lock"
 	mcpServer "github.com/quonaro/gnostis/internal/mcp"
 	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
@@ -43,7 +42,6 @@ type App struct {
 	embeddingCache map[string][]float32
 	progress       *progress.Progress
 	indexingStats  *stats.Stats
-	lock           *lock.Lock
 	ProgressWriter io.Writer
 	ConfigPath     string
 
@@ -99,7 +97,6 @@ func New(cfg config.Config) (*App, error) {
 		embeddingCache: embeddingCache,
 		progress:       progress.New(filepath.Join(cfg.DataDir, "indexing-progress.json")),
 		indexingStats:  stats.New(filepath.Join(cfg.DataDir, "project-stats.json")),
-		lock:           lock.New(filepath.Dir(cfg.DataDir)),
 	}
 	a.updateSnapshots(cfg, projects)
 
@@ -135,37 +132,16 @@ func (a *App) updateSnapshots(cfg config.Config, projects []project.Project) {
 	a.modelName.Store(cfg.Embeddings.Model)
 }
 
-// Run serves the MCP HTTP server while performing initial indexing and starting
-// the watcher in the background. The first component error stops the app.
+// Run serves the MCP stdio server while performing initial indexing and
+// starting the watcher in the background. The first component error stops the app.
 func (a *App) Run(ctx context.Context) error {
 	slog.InfoContext(ctx, "starting app")
-	if err := a.lock.TryLock(); err != nil {
-		return fmt.Errorf("acquire lock: %w", err)
-	}
-	defer func() { _ = a.lock.Unlock() }()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 2)
 	var wg sync.WaitGroup
-
-	ready := make(chan struct{})
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		slog.InfoContext(ctx, "serving mcp http", "name", a.cfg.MCP.Name, "version", a.cfg.MCP.Version, "address", a.cfg.MCP.Address)
-		if err := a.runHTTP(ctx, ready); err != nil {
-			errCh <- err
-		}
-		cancel()
-	}()
-
-	select {
-	case <-ready:
-	case err := <-errCh:
-		return err
-	}
 
 	wg.Add(1)
 	go func() {
@@ -200,6 +176,12 @@ func (a *App) Run(ctx context.Context) error {
 			cancel()
 		}
 	}()
+
+	// StartStdio blocks until stdin is closed or SIGTERM/SIGINT is received.
+	if err := a.mcp.StartStdio(ctx); err != nil {
+		errCh <- fmt.Errorf("stdio server: %w", err)
+	}
+	cancel()
 
 	wg.Wait()
 	close(errCh)

@@ -66,8 +66,6 @@ type ProviderConfig struct {
 type MCP struct {
 	Name    string `yaml:"name"`
 	Version string `yaml:"version"`
-	Address string `yaml:"address"`
-	Token   string `yaml:"token"`
 }
 
 const (
@@ -81,6 +79,5 @@ const (
 	defaultBatchSize            = 32
 	defaultServerName           = "gnostis"
 	defaultVersion              = ""
-	defaultAddress              = "127.0.0.1:8080"
 	defaultMinUserMessageLength = 10
 )

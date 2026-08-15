@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -46,41 +45,28 @@ func TestEmbed_ConcurrencySerialized(t *testing.T) {
 	}
 }
 
-func TestEmbed_BusyReturnsError(t *testing.T) {
-	handlerDone := make(chan struct{})
+func TestEmbed_ConcurrentCallsSucceed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-		case <-handlerDone:
-		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data":[{"embedding":[0.1,0.2],"index":0}]}`))
 	}))
-	defer func() {
-		close(handlerDone)
-		srv.Close()
-	}()
+	defer srv.Close()
 
 	p := newOpenAICompatible(srv.URL, "test-model", "", 32)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	done := make(chan struct{})
-	go func() {
-		_, _ = p.Embed(ctx, []string{"first call - long running"})
-		close(done)
-	}()
-	time.Sleep(100 * time.Millisecond)
-
-	_, err := p.Embed(context.Background(), []string{"second call - should get busy error"})
-	if err == nil {
-		t.Fatal("expected busy error, got nil")
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := p.Embed(context.Background(), []string{"test"})
+			if err != nil {
+				t.Errorf("Embed failed: %v", err)
+			}
+		}()
 	}
-	if !strings.Contains(err.Error(), "busy") {
-		t.Errorf("expected 'busy' in error, got: %v", err)
-	}
-
-	cancel()
-	<-done
+	close(start)
+	wg.Wait()
 }

@@ -70,28 +70,6 @@ directories:
 	}
 }
 
-func TestLoadPortEnv(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("GNOSTIS_PORT", "9090")
-
-	path := filepath.Join(dir, "config.yaml")
-	data := `
-directories:
-  - path: ` + dir + `
-`
-	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if cfg.MCP.Address != "127.0.0.1:9090" {
-		t.Errorf("mcp.address = %q, want 127.0.0.1:9090", cfg.MCP.Address)
-	}
-}
-
 func TestLoadValidation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -101,8 +79,12 @@ func TestLoadValidation(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	if _, err := Load(path); err == nil {
-		t.Fatal("expected error for empty directories")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(cfg.Directories) != 0 {
+		t.Errorf("directories = %d, want 0", len(cfg.Directories))
 	}
 }
 

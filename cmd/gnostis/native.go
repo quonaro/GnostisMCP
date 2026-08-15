@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
-	"strings"
 
 	"github.com/quonaro/lota/engine"
 
@@ -78,14 +75,4 @@ func runApp(cfg config.Config, _ io.Writer) error {
 		return fmt.Errorf("run app: %w", err)
 	}
 	return nil
-}
-
-func confirm(writer io.Writer, prompt string) bool {
-	_, _ = fmt.Fprintf(writer, "%s [y/n]: ", prompt)
-	scanner := bufio.NewScanner(os.Stdin)
-	if !scanner.Scan() {
-		return false
-	}
-	answer := strings.ToLower(strings.TrimSpace(scanner.Text()))
-	return answer == "y" || answer == "yes"
 }

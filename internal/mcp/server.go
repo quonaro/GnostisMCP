@@ -2,10 +2,7 @@ package mcp
 
 import (
 	"context"
-	"crypto/subtle"
-	"fmt"
 	"log/slog"
-	"net/http"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -49,7 +46,6 @@ type Indexer interface {
 type Server struct {
 	mu            sync.RWMutex
 	server        *mcpServer.MCPServer
-	http          *mcpServer.StreamableHTTPServer
 	name          string
 	version       string
 	engine        Searcher
@@ -96,46 +92,11 @@ func (s *Server) ReloadMemoryManager(mgr *memory.Manager) {
 	s.memoryManager = mgr
 }
 
-// StartHTTP runs the MCP server over Streamable HTTP on the given address.
-// If token is non-empty, the Authorization header must be "Bearer <token>".
-func (s *Server) StartHTTP(ctx context.Context, addr, token string) error {
-	slog.InfoContext(ctx, "starting mcp streamable http server", "name", s.name, "version", s.version, "address", addr)
-
-	// The handler forwards requests to the StreamableHTTPServer once it is created.
-	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.http.ServeHTTP(w, r)
-	})
-	if token != "" {
-		slog.InfoContext(ctx, "bearer token authentication enabled")
-		handler = bearerTokenHandler(handler, token)
-	}
-
-	httpServer := &http.Server{Addr: addr, Handler: handler}
-	s.http = mcpServer.NewStreamableHTTPServer(s.server, mcpServer.WithStreamableHTTPServer(httpServer))
-	if err := s.http.Start(addr); err != nil {
-		return fmt.Errorf("serve streamable http: %w", err)
-	}
-	return nil
-}
-
-func bearerTokenHandler(next http.Handler, token string) http.Handler {
-	expected := "Bearer " + token
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// StopHTTP gracefully shuts down the Streamable HTTP server.
-func (s *Server) StopHTTP(ctx context.Context) error {
-	if s.http == nil {
-		return nil
-	}
-	return s.http.Shutdown(ctx)
+// StartStdio runs the MCP server over stdio. It blocks until stdin is closed
+// or SIGTERM/SIGINT is received.
+func (s *Server) StartStdio(ctx context.Context) error {
+	slog.InfoContext(ctx, "starting mcp stdio server", "name", s.name, "version", s.version)
+	return mcpServer.ServeStdio(s.server)
 }
 
 func (s *Server) registerTools() {

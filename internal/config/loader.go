@@ -36,7 +36,15 @@ func Load(path string) (Config, error) {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Config{}, fmt.Errorf("read config file %s: %w", path, err)
+		if os.IsNotExist(err) {
+			if err := createDefaultConfig(path); err != nil {
+				return Config{}, fmt.Errorf("create default config: %w", err)
+			}
+			slog.Info("created default config", "path", path)
+			data = []byte(defaultConfigYAML)
+		} else {
+			return Config{}, fmt.Errorf("read config file %s: %w", path, err)
+		}
 	}
 
 	interpolated := InterpolateEnv(string(data))
@@ -141,15 +149,6 @@ func applyDefaults(cfg *Config) {
 	if cfg.MCP.Version == "" {
 		cfg.MCP.Version = defaultVersion
 	}
-	if cfg.MCP.Address == "" {
-		cfg.MCP.Address = defaultAddress
-		if port := os.Getenv("GNOSTIS_PORT"); port != "" {
-			cfg.MCP.Address = fmt.Sprintf("127.0.0.1:%s", port)
-		}
-	}
-	if cfg.MCP.Token == "" {
-		cfg.MCP.Token = os.Getenv("API_TOKEN")
-	}
 
 	applyProviderDefaults("cascade", &cfg.Memory.Cascade)
 	applyProviderDefaults("cursor", &cfg.Memory.Cursor)
@@ -207,10 +206,6 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("unsupported log_level: %s", cfg.LogLevel)
 	}
 
-	if len(cfg.Directories) == 0 {
-		return fmt.Errorf("at least one directory must be configured")
-	}
-
 	provider := strings.ToLower(cfg.Embeddings.Provider)
 	if provider != "ollama" && provider != "openai" {
 		return fmt.Errorf("unsupported embeddings provider: %s", cfg.Embeddings.Provider)
@@ -224,6 +219,7 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("embeddings batch_size must be positive")
 	}
 
+	validDirs := cfg.Directories[:0]
 	for i, dir := range cfg.Directories {
 		if dir.Path == "" {
 			return fmt.Errorf("directory %d: path is required", i)
@@ -231,16 +227,21 @@ func validate(cfg *Config) error {
 
 		info, err := os.Stat(dir.Path)
 		if err != nil {
-			return fmt.Errorf("directory %s: %w", dir.Path, err)
+			slog.Warn("skipping missing directory", "path", dir.Path, "error", err)
+			continue
 		}
 		if !info.IsDir() {
-			return fmt.Errorf("directory %s is not a directory", dir.Path)
+			slog.Warn("skipping path that is not a directory", "path", dir.Path)
+			continue
 		}
 
 		if dir.Name == "" {
 			return fmt.Errorf("directory %s: name is required", dir.Path)
 		}
+
+		validDirs = append(validDirs, dir)
 	}
+	cfg.Directories = validDirs
 
 	if err := validateProvider("memory.cascade", cfg.Memory.Cascade); err != nil {
 		return err
@@ -272,6 +273,29 @@ func validateProvider(prefix string, cfg ProviderConfig) error {
 		}
 	}
 
+	return nil
+}
+
+const defaultConfigYAML = `# Gnostis configuration — created automatically.
+# Add directories to index below. Use: gnostis run to start the MCP server.
+
+embeddings:
+  provider: ollama
+  url: http://localhost:11434/v1
+  model: nomic-embed-text
+  batch_size: 32
+
+directories: []
+`
+
+func createDefaultConfig(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create config directory: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(defaultConfigYAML), 0o600); err != nil {
+		return fmt.Errorf("write default config: %w", err)
+	}
 	return nil
 }
 

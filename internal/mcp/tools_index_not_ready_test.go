@@ -24,10 +24,12 @@ func TestQueryDocumentation_IndexNotReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("queryDocumentation: %v", err)
 	}
-	if !res.IsError {
-		t.Fatal("expected error result when index is not ready")
+	if res.IsError {
+		t.Fatalf("expected empty results during indexing, got error: %s", extractText(t, res))
 	}
-	assertTextEquals(t, res, "index is still being built")
+	if extractText(t, res) != "[]" {
+		t.Errorf("expected empty array, got %s", extractText(t, res))
+	}
 }
 
 func TestQueryDocumentation_EmptyResults_IndexIdle(t *testing.T) {
@@ -64,8 +66,10 @@ func TestSearchCodebase_IndexNotReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("searchCodebase: %v", err)
 	}
-	if !res.IsError {
-		t.Fatal("expected error result when index is not ready")
+	if res.IsError {
+		t.Fatalf("expected empty results during indexing, got error: %s", extractText(t, res))
 	}
-	assertTextEquals(t, res, "index is still being built")
+	if extractText(t, res) != "[]" {
+		t.Errorf("expected empty array, got %s", extractText(t, res))
+	}
 }

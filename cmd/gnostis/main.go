@@ -64,8 +64,6 @@ func main() {
 
 	builder := engine.NewBuilder("gnostis", cliYAML)
 	builder.RegisterNative("run", runHandler)
-	builder.RegisterNative("install", installHandler)
-	builder.RegisterNative("config", configShowHandler)
 	builder.RegisterNative("decrypt-cascade", decryptCascadeHandler)
 
 	app, err := builder.Build()
