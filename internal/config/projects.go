@@ -92,5 +92,6 @@ func DeleteProjectFile(dir, name string) error {
 }
 
 func projectFilePath(dir, name string) string {
-	return filepath.Join(dir, name+".json")
+	safe := strings.NewReplacer("/", "_", "\\", "_").Replace(name)
+	return filepath.Join(dir, safe+".json")
 }

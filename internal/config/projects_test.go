@@ -88,6 +88,33 @@ func TestLoadProjectFilesMissingDir(t *testing.T) {
 	}
 }
 
+func TestSaveProjectFileSanitizesName(t *testing.T) {
+	dir := t.TempDir()
+
+	d := Directory{Path: "/some/path", Name: "my/sub-project"}
+	if err := SaveProjectFile(dir, d); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// File should be flat, not in a subdirectory.
+	if _, err := os.Stat(filepath.Join(dir, "my_sub-project.json")); err != nil {
+		t.Fatalf("sanitized project file not created: %v", err)
+	}
+
+	// No subdirectory should exist.
+	if _, err := os.Stat(filepath.Join(dir, "my")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected subdirectory created, err=%v", err)
+	}
+
+	// Delete should also use the sanitized name.
+	if err := DeleteProjectFile(dir, "my/sub-project"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "my_sub-project.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected file to be deleted, got err=%v", err)
+	}
+}
+
 func TestLoadWithProjectFilesMigration(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
