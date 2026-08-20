@@ -9,6 +9,11 @@ import (
 	"github.com/quonaro/gnostis/internal/config"
 )
 
+var defaultExtensions = []string{".go", ".py", ".js", ".ts", ".jsx", ".tsx", ".rs", ".md"}
+var defaultExcludePatterns = []string{
+	"node_modules/**", ".git/**", "vendor/**", "dist/**", "build/**", "__pycache__/**",
+}
+
 // Directory holds effective indexing rules for a single root.
 type Directory struct {
 	config.Directory
@@ -16,15 +21,16 @@ type Directory struct {
 	effectiveExcludes   []string
 }
 
-// FromConfig merges directory-specific settings with global defaults.
-func FromConfig(idx config.Index, dir config.Directory) Directory {
+// FromConfig builds a Directory from a per-project config entry, applying
+// hardcoded defaults for extensions and exclude patterns.
+func FromConfig(dir config.Directory) Directory {
 	extensions := dir.Extensions
 	if len(extensions) == 0 {
-		extensions = idx.DefaultExtensions
+		extensions = defaultExtensions
 	}
 
-	excludes := make([]string, 0, len(idx.DefaultExcludePatterns)+len(dir.Exclude))
-	excludes = append(excludes, idx.DefaultExcludePatterns...)
+	excludes := make([]string, 0, len(defaultExcludePatterns)+len(dir.Exclude))
+	excludes = append(excludes, defaultExcludePatterns...)
 	excludes = append(excludes, dir.Exclude...)
 
 	return Directory{

@@ -6,6 +6,8 @@ builds:
 - id: gnostis
   binary: gnostis
   main: ./cmd/gnostis
+  ldflags:
+  - -s -w -X main.version={{.Version}} -X github.com/quonaro/gnostis/internal/mcp.version={{.Version}}
   env:
   - CGO_ENABLED=1
   - GOTOOLCHAIN=auto

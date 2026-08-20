@@ -34,7 +34,7 @@ func newMemoryServer(t *testing.T) (*Server, *memory.Manager, string) {
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, mgr, nil)
+	srv := New(&mockSearcher{}, nil, nil, mgr, nil)
 	return srv, mgr, dir
 }
 
@@ -167,7 +167,7 @@ func TestRebuildMemory(t *testing.T) {
 }
 
 func TestMemorySearch_Disabled(t *testing.T) {
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 
 	res, err := srv.memorySearch(context.Background(), mcp.CallToolRequest{}, memorySearchArgs{Query: "test"})
 	if err != nil {

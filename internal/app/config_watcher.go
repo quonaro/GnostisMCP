@@ -16,15 +16,13 @@ import (
 	"github.com/quonaro/gnostis/internal/watcher"
 )
 
-// watchConfig watches the config file and the projects directory for changes
-// and reloads the configuration.
+// watchConfig watches the projects directory for changes and reloads
+// the configuration.
 func (a *App) watchConfig(ctx context.Context) error {
-	if a.ConfigPath == "" {
+	projectsDir := a.cfg.ProjectsDirPath
+	if projectsDir == "" {
 		return nil
 	}
-
-	cfgDir := filepath.Dir(a.ConfigPath)
-	projectsDir := config.ProjectsDir(a.ConfigPath)
 
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -32,17 +30,12 @@ func (a *App) watchConfig(ctx context.Context) error {
 	}
 	defer func() { _ = fw.Close() }()
 
-	if err := fw.Add(cfgDir); err != nil {
-		return fmt.Errorf("watch config directory %s: %w", cfgDir, err)
-	}
 	// Best-effort: watch the projects directory if it exists.
 	if _, statErr := os.Stat(projectsDir); statErr == nil {
 		if err := fw.Add(projectsDir); err != nil {
 			slog.WarnContext(ctx, "watch projects directory", "dir", projectsDir, "error", err)
 		}
 	} else {
-		// Create the directory so we can watch it — it will be created on
-		// first project save anyway.
 		if mkErr := os.MkdirAll(projectsDir, 0o755); mkErr == nil {
 			if err := fw.Add(projectsDir); err != nil {
 				slog.WarnContext(ctx, "watch projects directory", "dir", projectsDir, "error", err)
@@ -50,7 +43,7 @@ func (a *App) watchConfig(ctx context.Context) error {
 		}
 	}
 
-	slog.InfoContext(ctx, "watching config file", "path", a.ConfigPath, "projects_dir", projectsDir)
+	slog.InfoContext(ctx, "watching projects directory", "dir", projectsDir)
 
 	var debounce *time.Timer
 	reset := func() {
@@ -77,14 +70,6 @@ func (a *App) watchConfig(ctx context.Context) error {
 		case event, ok := <-fw.Events:
 			if !ok {
 				return nil
-			}
-			// React to config.yaml changes.
-			if filepath.Base(event.Name) == filepath.Base(a.ConfigPath) {
-				if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 && event.Op&fsnotify.Rename == 0 {
-					continue
-				}
-				reset()
-				continue
 			}
 			// React to project JSON file changes in the projects directory.
 			if filepath.Dir(event.Name) == projectsDir && strings.HasSuffix(event.Name, ".json") {
@@ -121,7 +106,7 @@ func (a *App) newWatcher() *watcher.Watcher {
 		a.rebuildMu.Lock()
 		defer a.rebuildMu.Unlock()
 
-		if err := reindexFile(context.Background(), path, a.dirs, a.projects, a.cfg, a.store, a.symbolIndex, a.provider, a.embeddingCache, a.indexingStats); err != nil {
+		if err := reindexFile(context.Background(), path, a.dirs, a.projects, a.store, a.symbolIndex, a.provider, a.embeddingCache, a.indexingStats); err != nil {
 			slog.Error("reindex file", "path", path, "error", err)
 			return
 		}
@@ -152,18 +137,9 @@ func (a *App) restartWatcher(ctx context.Context) error {
 	return nil
 }
 
-// ReloadConfig reloads the configuration from disk and updates the project list.
+// ReloadConfig reloads the configuration from env and updates the project list.
 func (a *App) ReloadConfig(ctx context.Context) error {
-	path := a.ConfigPath
-	if path == "" {
-		resolved, err := config.ResolvePath("")
-		if err != nil {
-			return fmt.Errorf("resolve config path: %w", err)
-		}
-		path = resolved
-	}
-
-	cfg, err := config.Load(path)
+	cfg, err := config.FromEnv()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -171,12 +147,7 @@ func (a *App) ReloadConfig(ctx context.Context) error {
 	// Preserve runtime settings that cannot be changed without a restart.
 	cfg.DataDir = a.cfg.DataDir
 	cfg.Embeddings = a.cfg.Embeddings
-	if cfg.MCP.Version == "" {
-		cfg.MCP.Version = a.cfg.MCP.Version
-	}
-	if cfg.MCP.Name == "" {
-		cfg.MCP.Name = a.cfg.MCP.Name
-	}
+	cfg.ProjectsDirPath = a.cfg.ProjectsDirPath
 
 	dirs, projects, err := resolveProjects(cfg)
 	if err != nil {

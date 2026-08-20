@@ -8,91 +8,32 @@ import (
 
 	"github.com/quonaro/gnostis/internal/config"
 	"github.com/quonaro/gnostis/internal/directory"
-	"github.com/quonaro/gnostis/internal/discover"
 	"github.com/quonaro/gnostis/internal/project"
 )
 
-// resolveProjects expands config directories into concrete directory/project pairs.
-// Auto-discovery is applied to directories marked with Auto.
-// Explicit (non-auto) directories are processed first so auto-discovery can skip
-// paths that are already configured.
+// resolveProjects loads project JSON files from the projects directory and
+// creates directory/project pairs.
 func resolveProjects(cfg config.Config) ([]directory.Directory, []project.Project, error) {
-	var dirs []directory.Directory
-	var projects []project.Project
-	usedNames := make(map[string]bool)
-	usedPaths := make(map[string]bool)
+	dirs, err := config.LoadProjectFiles(cfg.ProjectsDirPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load project files: %w", err)
+	}
 
-	// Process explicit directories first.
-	for _, d := range cfg.Directories {
-		if d.Auto {
-			continue
-		}
+	var outDirs []directory.Directory
+	var outProjects []project.Project
+	for _, d := range dirs {
 		p := project.New(d.Name, d.Path)
-		dirs = append(dirs, directory.FromConfig(cfg.Index, d))
-		projects = append(projects, p)
-		usedNames[d.Name] = true
-		usedPaths[d.Path] = true
+		outDirs = append(outDirs, directory.FromConfig(d))
+		outProjects = append(outProjects, p)
 	}
 
-	// Then expand auto roots, skipping paths already covered by explicit entries.
-	for _, d := range cfg.Directories {
-		if !d.Auto {
-			continue
-		}
-
-		opts := discover.Options{
-			Git:         d.Discover.Git,
-			Go:          d.Discover.Go,
-			NodeModules: d.Discover.NodeModules,
-			Venv:        d.Discover.Venv,
-			Workspace:   d.Discover.Workspace,
-			Depth:       d.Depth,
-		}
-		found, err := discover.Expand(d.Path, opts)
-		if err != nil {
-			return nil, nil, fmt.Errorf("expand directory %s: %w", d.Path, err)
-		}
-		found = discover.UniqueNames(found, usedNames)
-		for _, p := range found {
-			if usedPaths[p.Path] {
-				continue
-			}
-			child := config.Directory{
-				Path:          p.Path,
-				Name:          p.Name,
-				Extensions:    d.Extensions,
-				Include:       d.Include,
-				Exclude:       d.Exclude,
-				MaxFileSizeMB: d.MaxFileSizeMB,
-			}
-			dirs = append(dirs, directory.FromConfig(cfg.Index, child))
-			projects = append(projects, project.New(p.Name, p.Path))
-			usedNames[p.Name] = true
-			usedPaths[p.Path] = true
-		}
-	}
-
-	return dirs, projects, nil
-}
-
-// DiscoverProjects scans root and returns projects that are not already configured.
-func (a *App) DiscoverProjects(ctx context.Context, root string, opts discover.Options) (discover.Result, error) {
-	snap := a.projectsSnapshot.Load()
-	if snap == nil {
-		return discover.FindProjects(root, opts, nil)
-	}
-
-	existing := make(map[string]bool)
-	for _, p := range *snap {
-		existing[p.Path] = true
-	}
-	return discover.FindProjects(root, opts, existing)
+	return outDirs, outProjects, nil
 }
 
 // AddProject saves a project JSON file to the projects directory and updates
 // the in-memory project list. It does not start indexing — call
 // StartRebuildProject separately to index the project.
-func (a *App) AddProject(ctx context.Context, path, name string) (string, error) {
+func (a *App) AddProject(ctx context.Context, path, name string, extensions, include, exclude []string, maxFileSizeMB int) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is required")
 	}
@@ -122,23 +63,20 @@ func (a *App) AddProject(ctx context.Context, path, name string) (string, error)
 	}
 	name = uniqueProjectName(name, a.projects)
 
-	d := config.Directory{Path: absPath, Name: name}
-
-	// Save the project as an individual JSON file.
-	projectsDir := a.cfg.ProjectsDirPath
-	if projectsDir == "" {
-		resolved, err := config.ResolvePath(a.ConfigPath)
-		if err != nil {
-			return "", fmt.Errorf("resolve config path: %w", err)
-		}
-		projectsDir = config.ProjectsDir(resolved)
+	d := config.Directory{
+		Path:          absPath,
+		Name:          name,
+		Extensions:    extensions,
+		Include:       include,
+		Exclude:       exclude,
+		MaxFileSizeMB: maxFileSizeMB,
 	}
-	if err := config.SaveProjectFile(projectsDir, d); err != nil {
+
+	if err := config.SaveProjectFile(a.cfg.ProjectsDirPath, d); err != nil {
 		return "", fmt.Errorf("save project file: %w", err)
 	}
 
-	a.cfg.Directories = append(a.cfg.Directories, d)
-	a.dirs = append(a.dirs, directory.FromConfig(a.cfg.Index, d))
+	a.dirs = append(a.dirs, directory.FromConfig(d))
 	a.projects = append(a.projects, project.New(name, absPath))
 	a.updateSnapshots(a.cfg, a.projects)
 
@@ -149,6 +87,47 @@ func (a *App) AddProject(ctx context.Context, path, name string) (string, error)
 		return "", fmt.Errorf("restart watcher: %w", err)
 	}
 	return name, nil
+}
+
+// EditProject updates a project's configuration and saves it to the JSON file.
+func (a *App) EditProject(ctx context.Context, name string, extensions, include, exclude []string, maxFileSizeMB int) error {
+	a.rebuildMu.Lock()
+	defer a.rebuildMu.Unlock()
+
+	idx := -1
+	for i, p := range a.projects {
+		if p.Name == name {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return fmt.Errorf("project %q not found", name)
+	}
+
+	d := config.Directory{
+		Path:          a.projects[idx].Path,
+		Name:          name,
+		Extensions:    extensions,
+		Include:       include,
+		Exclude:       exclude,
+		MaxFileSizeMB: maxFileSizeMB,
+	}
+
+	if err := config.SaveProjectFile(a.cfg.ProjectsDirPath, d); err != nil {
+		return fmt.Errorf("save project file: %w", err)
+	}
+
+	a.dirs[idx] = directory.FromConfig(d)
+	a.updateSnapshots(a.cfg, a.projects)
+
+	if a.mcp != nil {
+		a.mcp.ReloadProjects(a.projects)
+	}
+	if err := a.restartWatcher(ctx); err != nil {
+		return fmt.Errorf("restart watcher: %w", err)
+	}
+	return nil
 }
 
 // RemoveProject removes a project by name and deletes its indexed chunks.
@@ -177,34 +156,12 @@ func (a *App) RemoveProject(ctx context.Context, name string) error {
 		return fmt.Errorf("save symbol index: %w", err)
 	}
 
-	// Remove from runtime lists.
 	a.dirs = append(a.dirs[:idx], a.dirs[idx+1:]...)
 	a.projects = append(a.projects[:idx], a.projects[idx+1:]...)
 	a.updateSnapshots(a.cfg, a.projects)
 
-	// Remove the project JSON file.
-	projectsDir := a.cfg.ProjectsDirPath
-	if projectsDir == "" {
-		resolved, err := config.ResolvePath(a.ConfigPath)
-		if err != nil {
-			return fmt.Errorf("resolve config path: %w", err)
-		}
-		projectsDir = config.ProjectsDir(resolved)
-	}
-	if err := config.DeleteProjectFile(projectsDir, name); err != nil {
+	if err := config.DeleteProjectFile(a.cfg.ProjectsDirPath, name); err != nil {
 		return fmt.Errorf("delete project file: %w", err)
-	}
-
-	// Remove from in-memory config directories.
-	cfgIdx := -1
-	for i, d := range a.cfg.Directories {
-		if d.Name == name {
-			cfgIdx = i
-			break
-		}
-	}
-	if cfgIdx != -1 {
-		a.cfg.Directories = append(a.cfg.Directories[:cfgIdx], a.cfg.Directories[cfgIdx+1:]...)
 	}
 
 	if a.mcp != nil {

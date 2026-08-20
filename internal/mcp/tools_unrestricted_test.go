@@ -18,7 +18,7 @@ func TestFSRead_AbsolutePath(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.fsRead(context.Background(), mcp.CallToolRequest{}, fsReadArgs{Path: path})
 	if err != nil {
 		t.Fatalf("fsRead: %v", err)
@@ -35,7 +35,7 @@ func TestFSRead_LineRange(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.fsRead(context.Background(), mcp.CallToolRequest{}, fsReadArgs{Path: path, StartLine: 2, EndLine: 3})
 	if err != nil {
 		t.Fatalf("fsRead: %v", err)
@@ -46,7 +46,7 @@ func TestFSRead_LineRange(t *testing.T) {
 }
 
 func TestFSRead_NotAbsolute(t *testing.T) {
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.fsRead(context.Background(), mcp.CallToolRequest{}, fsReadArgs{Path: "relative/path.txt"})
 	if err != nil {
 		t.Fatalf("fsRead: %v", err)
@@ -58,7 +58,7 @@ func TestFSRead_NotAbsolute(t *testing.T) {
 }
 
 func TestFSRead_MissingFile(t *testing.T) {
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.fsRead(context.Background(), mcp.CallToolRequest{}, fsReadArgs{Path: "/does/not/exist.txt"})
 	if err != nil {
 		t.Fatalf("fsRead: %v", err)
@@ -75,7 +75,7 @@ func TestFSGrep(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.fsGrep(context.Background(), mcp.CallToolRequest{}, fsGrepArgs{Path: dir, Query: "Foo"})
 	if err != nil {
 		t.Fatalf("fsGrep: %v", err)
@@ -95,7 +95,7 @@ func TestFSGrep_Regex(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.fsGrep(context.Background(), mcp.CallToolRequest{}, fsGrepArgs{Path: dir, Query: `func [A-Z][a-z]+`, Regex: true})
 	if err != nil {
 		t.Fatalf("fsGrep: %v", err)
@@ -118,7 +118,7 @@ func TestFSList(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.fsList(context.Background(), mcp.CallToolRequest{}, fsListArgs{Path: dir, Pattern: "*.go"})
 	if err != nil {
 		t.Fatalf("fsList: %v", err)
@@ -141,7 +141,7 @@ func TestFSTree(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.fsTree(context.Background(), mcp.CallToolRequest{}, fsTreeArgs{Path: dir, Depth: 2})
 	if err != nil {
 		t.Fatalf("fsTree: %v", err)

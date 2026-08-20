@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 
 	"github.com/quonaro/gnostis/internal/app"
-	"github.com/quonaro/gnostis/internal/config"
+	"github.com/quonaro/gnostis/internal/lock"
 	"github.com/quonaro/gnostis/internal/log"
+	mcp "github.com/quonaro/gnostis/internal/mcp"
 )
 
 // version is set by the build linker to the short git commit hash.
@@ -62,18 +63,30 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Try to acquire an exclusive lock on the data directory. If another
+	// gnostis process already holds the lock, this process becomes a
+	// stdio proxy that forwards all MCP messages to the primary instance
+	// over HTTP. This allows multiple editor windows to share a single
+	// gnostis process while keeping the stdio MCP config format.
+	flock := lock.New(cfg.DataDir)
+	if err := flock.TryLock(); err != nil {
+		slog.Info("another gnostis instance is running, starting stdio proxy", "data_dir", cfg.DataDir)
+		mcpURL := fmt.Sprintf("http://localhost:%d/mcp", cfg.Web.Port)
+		if err := runStdioProxy(mcpURL); err != nil {
+			fmt.Fprintf(os.Stderr, "stdio proxy: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+	defer func() { _ = flock.Unlock() }()
+	slog.Info("acquired data dir lock, running as primary", "data_dir", cfg.DataDir)
+
+	mcp.SetVersion(version)
 	application, err := app.New(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "initialize app: %v\n", err)
 		os.Exit(1)
 	}
-
-	cfgPath, err := config.ResolvePath("")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve config path: %v\n", err)
-		os.Exit(1)
-	}
-	application.ConfigPath = cfgPath
 
 	if err := application.Run(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "run: %v\n", err)

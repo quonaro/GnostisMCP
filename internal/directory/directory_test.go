@@ -7,14 +7,9 @@ import (
 )
 
 func TestShouldIndex(t *testing.T) {
-	idx := config.Index{
-		DefaultExtensions:      []string{".go", ".md"},
-		DefaultExcludePatterns: []string{"vendor/**"},
-	}
-
-	d := FromConfig(idx, config.Directory{
+	d := FromConfig(config.Directory{
 		Path:          "/tmp/proj",
-		Extensions:    []string{".go"},
+		Extensions:    []string{".go", ".md"},
 		Exclude:       []string{"**/*_test.go", "data"},
 		MaxFileSizeMB: 1,
 	})
@@ -25,7 +20,7 @@ func TestShouldIndex(t *testing.T) {
 		want bool
 	}{
 		{"main.go", 100, true},
-		{"README.md", 100, false},
+		{"README.md", 100, true},
 		{"main_test.go", 100, false},
 		{"vendor/lib.go", 100, false},
 		{".git/FETCH_HEAD", 100, false},
@@ -45,10 +40,10 @@ func TestShouldIndex(t *testing.T) {
 }
 
 func TestIncludeFilter(t *testing.T) {
-	idx := config.Index{DefaultExtensions: []string{".go"}}
-	d := FromConfig(idx, config.Directory{
-		Path:    "/tmp/proj",
-		Include: []string{"src/**"},
+	d := FromConfig(config.Directory{
+		Path:       "/tmp/proj",
+		Extensions: []string{".go"},
+		Include:    []string{"src/**"},
 	})
 
 	if d.ShouldIndex("main.go", 100) {
@@ -60,11 +55,7 @@ func TestIncludeFilter(t *testing.T) {
 }
 
 func TestDefaultExcludePatterns(t *testing.T) {
-	idx := config.Index{
-		DefaultExtensions:      []string{".go"},
-		DefaultExcludePatterns: []string{"node_modules/**", ".git/**", "vendor/**"},
-	}
-	d := FromConfig(idx, config.Directory{Path: "/tmp/proj"})
+	d := FromConfig(config.Directory{Path: "/tmp/proj"})
 
 	cases := []struct {
 		rel  string

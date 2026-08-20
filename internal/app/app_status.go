@@ -54,7 +54,7 @@ func (a *App) ProjectStats(ctx context.Context) (map[string]stats.Project, error
 		if err != nil {
 			return nil, fmt.Errorf("count project %q: %w", p.Name, err)
 		}
-		stat := stats.Project{Chunks: count}
+		stat := stats.Project{Path: p.Path, Chunks: count}
 		if s, ok := loaded[p.Name]; ok {
 			stat.LastIndexedAt = s.LastIndexedAt
 		}

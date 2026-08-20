@@ -114,32 +114,3 @@ func TestSaveProjectFileSanitizesName(t *testing.T) {
 		t.Fatalf("expected file to be deleted, got err=%v", err)
 	}
 }
-
-func TestLoadWithProjectFilesMigration(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-
-	// Write config with inline directories.
-	data := "directories:\n  - path: " + dir + "\n    name: test-proj\n"
-	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
-	// Migration should have created a project JSON file.
-	projFile := filepath.Join(ProjectsDir(path), "test-proj.json")
-	if _, err := os.Stat(projFile); err != nil {
-		t.Fatalf("migrated project file not created: %v", err)
-	}
-
-	if len(cfg.Directories) != 1 {
-		t.Errorf("directories = %d, want 1", len(cfg.Directories))
-	}
-	if cfg.Directories[0].Name != "test-proj" {
-		t.Errorf("name = %q, want test-proj", cfg.Directories[0].Name)
-	}
-}

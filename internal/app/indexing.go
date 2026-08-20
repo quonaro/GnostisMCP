@@ -228,7 +228,7 @@ func chunkFilesParallel(ctx context.Context, files []indexer.FileInfo, ch *chunk
 	return changed
 }
 
-func reindexFile(ctx context.Context, absPath string, dirs []directory.Directory, projects []project.Project, cfg config.Config, st store.VectorStore, sym *symbol.Index, provider embeddings.Provider, cache map[string][]float32, indexingStats *stats.Stats) error {
+func reindexFile(ctx context.Context, absPath string, dirs []directory.Directory, projects []project.Project, st store.VectorStore, sym *symbol.Index, provider embeddings.Provider, cache map[string][]float32, indexingStats *stats.Stats) error {
 	if len(dirs) != len(projects) {
 		return fmt.Errorf("directory and project count mismatch")
 	}
@@ -243,7 +243,7 @@ func reindexFile(ctx context.Context, absPath string, dirs []directory.Directory
 	// Path is not under any configured directory. Index it under a synthetic
 	// directory rooted at the file's parent so global rules still apply.
 	parent := filepath.Dir(absPath)
-	dir := directory.FromConfig(cfg.Index, config.Directory{Path: parent, Name: filepath.Base(parent)})
+	dir := directory.FromConfig(config.Directory{Path: parent, Name: filepath.Base(parent)})
 	proj := project.New(filepath.Base(parent), parent)
 	return reindexFileUnder(ctx, absPath, dir, proj, st, sym, provider, cache, indexingStats)
 }

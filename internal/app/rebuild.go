@@ -204,7 +204,7 @@ func (a *App) rebuildDirectory(ctx context.Context, dirPath string) error {
 		return fmt.Errorf("delete directory chunks: %w", err)
 	}
 
-	dir := directory.FromConfig(a.cfg.Index, config.Directory{Path: dirPath, Name: filepath.Base(dirPath)})
+	dir := directory.FromConfig(config.Directory{Path: dirPath, Name: filepath.Base(dirPath)})
 	proj := project.New(filepath.Base(dirPath), dirPath)
 
 	if err := indexDirectoryWithRetry(ctx, a.ProgressWriter, dir, proj, a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.embeddingCache, nil, a.indexingStats); err != nil {
@@ -220,7 +220,7 @@ func (a *App) rebuildFile(ctx context.Context, filePath string) error {
 	_ = a.store.DeleteByPath(ctx, filePath)
 	a.symbolIndex.RemoveByPath(filePath)
 
-	if err := reindexFile(ctx, filePath, a.dirs, a.projects, a.cfg, a.store, a.symbolIndex, a.provider, a.embeddingCache, a.indexingStats); err != nil {
+	if err := reindexFile(ctx, filePath, a.dirs, a.projects, a.store, a.symbolIndex, a.provider, a.embeddingCache, a.indexingStats); err != nil {
 		return fmt.Errorf("reindex file: %w", err)
 	}
 	return nil

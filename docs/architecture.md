@@ -66,7 +66,7 @@ Cursor/Windsurf
 
 See the project root. Key packages:
 
-- `internal/config` — YAML loading and env interpolation.
+- `internal/config` — environment-based configuration loading.
 - `internal/directory` — per-directory indexing rules.
 - `internal/indexer` — file walking and filtering.
 - `internal/chunker` — tree-sitter symbol extraction.
@@ -75,3 +75,4 @@ See the project root. Key packages:
 - `internal/search` — search orchestration and reranking.
 - `internal/mcp` — MCP server and tools.
 - `internal/watcher` — fsnotify debounced watcher.
+- `internal/web` — HTTP dashboard server with SSE and embedded Svelte SPA.

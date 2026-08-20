@@ -1,88 +1,63 @@
 package config
 
-// Config holds the complete application configuration.
+// Config holds the complete application configuration loaded from environment variables.
 type Config struct {
-	LogLevel    string      `yaml:"log_level"`
-	DataDir     string      `yaml:"data_dir"`
-	Embeddings  Embeddings  `yaml:"embeddings"`
-	Index       Index       `yaml:"index"`
-	Directories []Directory `yaml:"directories"`
-	Memory      Memory      `yaml:"memory"`
-	MCP         MCP         `yaml:"mcp"`
-
-	// ProjectsDirPath is the resolved path to the per-project JSON files
-	// directory. It is not serialized into config.yaml — it is derived from
-	// the config file location at load time.
-	ProjectsDirPath string `yaml:"-"`
+	LogLevel        string
+	DataDir         string
+	ProjectsDirPath string
+	Embeddings      Embeddings
+	Memory          Memory
+	Web             Web
 }
 
 // Embeddings configures the embedding provider.
 type Embeddings struct {
-	Provider  string `yaml:"provider"`
-	URL       string `yaml:"url"`
-	Model     string `yaml:"model"`
-	APIKey    string `yaml:"api_key"`
-	BatchSize int    `yaml:"batch_size"`
-}
-
-// Index configures global indexing defaults.
-type Index struct {
-	DefaultExtensions      []string `yaml:"default_extensions"`
-	DefaultExcludePatterns []string `yaml:"default_exclude_patterns"`
-}
-
-// Directory configures a single indexed root.
-// When Auto is true, the directory is expanded into subprojects by discovery.
-type Directory struct {
-	Path          string   `yaml:"path"`
-	Name          string   `yaml:"name"`
-	Extensions    []string `yaml:"extensions"`
-	Include       []string `yaml:"include"`
-	Exclude       []string `yaml:"exclude"`
-	MaxFileSizeMB int      `yaml:"max_file_size_mb"`
-	Auto          bool     `yaml:"auto"`
-	Depth         int      `yaml:"depth"`
-	Discover      Discover `yaml:"discover"`
-}
-
-// Discover controls which markers trigger auto project detection.
-type Discover struct {
-	Git         bool `yaml:"git"`
-	Go          bool `yaml:"go"`
-	NodeModules bool `yaml:"node_modules"`
-	Venv        bool `yaml:"venv"`
-	Workspace   bool `yaml:"workspace"`
+	Provider  string
+	URL       string
+	Model     string
+	APIKey    string
+	BatchSize int
 }
 
 // Memory configures chat/dialogue memory providers.
 type Memory struct {
-	Cascade ProviderConfig `yaml:"cascade"`
-	Cursor  ProviderConfig `yaml:"cursor"`
+	Cascade ProviderConfig
+	Cursor  ProviderConfig
 }
 
 // ProviderConfig configures a single memory provider (cascade or cursor).
 type ProviderConfig struct {
-	Enabled              bool     `yaml:"enabled"`
-	SourceDirs           []string `yaml:"source_dirs"`
-	MinUserMessageLength int      `yaml:"min_user_message_length"`
+	Enabled              bool
+	SourceDirs           []string
+	MinUserMessageLength int
 }
 
-// MCP configures the Model Context Protocol server.
-type MCP struct {
-	Name    string `yaml:"name"`
-	Version string `yaml:"version"`
+// Web configures the optional HTTP dashboard server.
+type Web struct {
+	Enabled bool
+	Port    int
+}
+
+// Directory configures a single indexed project.
+type Directory struct {
+	Path          string   `json:"path"`
+	Name          string   `json:"name"`
+	Extensions    []string `json:"extensions,omitempty"`
+	Include       []string `json:"include,omitempty"`
+	Exclude       []string `json:"exclude,omitempty"`
+	MaxFileSizeMB int      `json:"max_file_size_mb,omitempty"`
 }
 
 const (
 	defaultLogLevel             = "info"
 	defaultDataDir              = "${HOME}/.gnostis/data"
+	DefaultProjectsDir          = "${HOME}/.gnostis/projects"
 	DefaultMemoryDataDir        = "${HOME}/.gnostis/data/memory"
-	defaultConfigPath           = "${HOME}/.gnostis/config.yaml"
 	defaultProvider             = "ollama"
 	defaultURL                  = "http://localhost:11434/v1"
 	defaultModel                = "nomic-embed-text"
 	defaultBatchSize            = 32
-	defaultServerName           = "gnostis"
-	defaultVersion              = ""
+	defaultWebEnabled           = true
+	defaultWebPort              = 7878
 	defaultMinUserMessageLength = 10
 )

@@ -9,7 +9,7 @@ import (
 )
 
 func loadConfig() (config.Config, error) {
-	cfg, err := config.Load("")
+	cfg, err := config.FromEnv()
 	if err != nil {
 		return config.Config{}, fmt.Errorf("load config: %w", err)
 	}
@@ -20,10 +20,6 @@ func loadConfig() (config.Config, error) {
 			return config.Config{}, fmt.Errorf("parse log level: %w", err)
 		}
 		slog.SetDefault(slog.New(log.NewHandler(logOutput, level)))
-	}
-
-	if cfg.MCP.Version == "" {
-		cfg.MCP.Version = version
 	}
 
 	return cfg, nil

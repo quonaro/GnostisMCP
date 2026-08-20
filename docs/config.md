@@ -1,124 +1,45 @@
 # Configuration
 
-Gnostis reads `~/.gnostis/config.yaml`. Data is always stored in `~/.gnostis/data` and logs in `~/.gnostis/gnostis.log`.
+Gnostis is configured entirely through environment variables. No YAML config file is needed.
 
-The only environment variable that controls startup behavior is `GNOSTIS_PORT`, which overrides the default HTTP port `8080`.
+Data is stored in `~/.gnostis/data` and logs in `~/.gnostis/gnostis.log` by default.
 
-Environment variables inside the file can still be interpolated with `${VAR}` or `${VAR:-default}`.
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `GNOSTIS_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `GNOSTIS_DATA_DIR` | `~/.gnostis/data` | Data directory (vector store, symbol index, etc.) |
+| `GNOSTIS_PROJECTS_DIR` | `~/.gnostis/projects` | Directory containing per-project JSON files |
+| `GNOSTIS_EMBEDDINGS_PROVIDER` | `ollama` | Embedding provider: `ollama` or `openai` |
+| `GNOSTIS_EMBEDDINGS_URL` | `http://localhost:11434/v1` | Embedding API endpoint |
+| `GNOSTIS_EMBEDDINGS_MODEL` | `nomic-embed-text` | Embedding model name |
+| `GNOSTIS_EMBEDDINGS_API_KEY` | _(empty)_ | API key for `openai` provider |
+| `GNOSTIS_EMBEDDINGS_BATCH_SIZE` | `32` | Max texts per embedding request |
+| `GNOSTIS_WEB_ENABLED` | `true` | Enable the web dashboard |
+| `GNOSTIS_WEB_PORT` | `7878` | Web dashboard port |
+| `GNOSTIS_MEMORY_CASCADE_ENABLED` | `false` | Enable Cascade memory indexing |
+| `GNOSTIS_MEMORY_CASCADE_SOURCE_DIRS` | _(auto-detected)_ | Comma-separated list of Cascade trajectory dirs |
+| `GNOSTIS_MEMORY_CASCADE_MIN_MSG_LEN` | `10` | Minimum user message length to index |
+| `GNOSTIS_MEMORY_CURSOR_ENABLED` | `false` | Enable Cursor memory indexing |
+| `GNOSTIS_MEMORY_CURSOR_SOURCE_DIRS` | _(empty)_ | Comma-separated list of Cursor dirs |
+| `GNOSTIS_MEMORY_CURSOR_MIN_MSG_LEN` | `10` | Minimum user message length to index |
 
 ## Example
 
-```yaml
-log_level: info
-
-embeddings:
-  provider: ollama
-  url: ${OLLAMA_URL:-http://localhost:11434/v1}
-  model: ${EMBEDDING_MODEL:-nomic-embed-text}
-  api_key: ${OPENAI_API_KEY:-}
-  batch_size: 32
-
-index:
-  default_extensions: [".go", ".py", ".js", ".ts", ".jsx", ".tsx", ".rs", ".md"]
-  default_exclude_patterns:
-    [
-      "node_modules/**",
-      ".git/**",
-      "vendor/**",
-      "dist/**",
-      "build/**",
-      "__pycache__/**",
-    ]
-
-directories:
-  - path: ${HOME}/projects/myapp
-    name: myapp
-    extensions: [".go", ".md"]
-    exclude:
-      - "**/vendor/**"
-      - "**/*_test.go"
-      - "docs/legacy/**"
-    include:
-      - "src/**"
-      - "pkg/**"
-    max_file_size_mb: 10
-
-  - path: ${HOME}/projects/shared-lib
-    name: shared-lib
-    exclude:
-      - "**/__pycache__/**"
-      - "**/*.pyc"
-
-  - path: ${HOME}/CascadeProjects
-    name: my-workspaces
-    auto: true
-    depth: 3
-    discover:
-      git: true
-      go: true
-      node_modules: false
-      venv: false
-      workspace: true
-
-mcp:
-  name: gnostis
-  address: "127.0.0.1:8080"
-  token: ""
-
-memory:
-  cascade:
-    enabled: true
-    source_dirs:
-      - ${HOME}/.codeium/windsurf-next/cascade
-    min_user_message_length: 10
-  cursor:
-    enabled: false
+```bash
+export GNOSTIS_LOG_LEVEL=debug
+export GNOSTIS_EMBEDDINGS_PROVIDER=ollama
+export GNOSTIS_EMBEDDINGS_URL=http://localhost:11434/v1
+export GNOSTIS_EMBEDDINGS_MODEL=nomic-embed-text
+export GNOSTIS_WEB_PORT=7878
+export GNOSTIS_MEMORY_CASCADE_ENABLED=true
+export GNOSTIS_MEMORY_CASCADE_SOURCE_DIRS=$HOME/.codeium/windsurf/cascade
 ```
 
-## Fields
+## Per-project files
 
-### `log_level`
-
-Log level for the application. One of: `debug`, `info`, `warn`, `error`. Default: `info`.
-Set to `debug` to see detailed embedding request logs and model activity.
-
-### `embeddings`
-
-- `provider`: `ollama` or `openai`.
-- `url`: endpoint for HTTP providers.
-- `model`: model name.
-- `api_key`: optional, used by `openai` provider.
-- `batch_size`: max texts per embedding request.
-
-### `index`
-
-- `default_extensions`: allowed file extensions for all directories unless overridden.
-- `default_exclude_patterns`: excluded globs for all directories unless overridden.
-
-### `directories`
-
-List of indexing roots. Each entry supports:
-
-- `path` (required): absolute directory path.
-- `name`: project name; inferred from directory name if omitted.
-- `auto`: when `true`, automatically discover projects under `path` using the `discover` rules. Default: `false`.
-- `depth`: maximum recursion depth for auto-discovery. Default: `2`.
-- `discover`: markers used to detect projects when `auto` is `true`:
-  - `git`: directories containing `.git`. Default: `true`.
-  - `go`: directories containing `go.mod`. Default: `false`.
-  - `node_modules`: directories containing `node_modules`. Default: `false`.
-  - `venv`: directories containing `.venv`. Default: `false`.
-  - `workspace`: parse `.code-workspace` files and include their folders. Default: `true`.
-- `extensions`: overrides `index.default_extensions`.
-- `include`: if set, only matching files are indexed.
-- `exclude`: excluded globs; merged with defaults.
-- `max_file_size_mb`: files larger than this are skipped.
-
-Inline `directories` entries in `config.yaml` are still supported for backward compatibility. On first load, if no project JSON files exist yet, inline entries are automatically migrated to individual JSON files (see [Per-project files](#per-project-files) below).
-
-### Per-project files
-
-Individual projects are stored as JSON files in the `~/.gnostis/projects/` directory (next to `config.yaml`). Each file is named `<project-name>.json` and contains a single project configuration:
+Individual projects are stored as JSON files in the projects directory (`~/.gnostis/projects/` by default). Each file is named `<project-name>.json`:
 
 ```json
 {
@@ -127,79 +48,45 @@ Individual projects are stored as JSON files in the `~/.gnostis/projects/` direc
   "extensions": [],
   "include": [],
   "exclude": [],
-  "max_file_size_mb": 5,
-  "auto": false,
-  "depth": 0,
-  "discover": {
-    "git": false,
-    "go": false,
-    "node_modules": false,
-    "venv": false,
-    "workspace": false
-  }
+  "max_file_size_mb": 5
 }
 ```
 
-The `add_project` MCP tool creates a JSON file in this directory **without** starting indexing. To index the project, call `rebuild_project` separately. This allows adding many projects quickly and indexing them in a controlled manner.
+- `path` (required): absolute directory path.
+- `name`: project name; inferred from directory name if omitted.
+- `extensions`: file extensions to index (e.g. `.go`, `.py`). Defaults to a standard set if empty.
+- `include`: glob patterns; if set, only matching files are indexed.
+- `exclude`: glob patterns to exclude from indexing (merged with built-in defaults like `.git/**`, `node_modules/**`, `vendor/**`).
+- `max_file_size_mb`: skip files larger than this. Default: `5`.
+
+The `add_project` MCP tool creates a JSON file **without** starting indexing. Call `rebuild_project` separately to index.
+
+The `edit_project` MCP tool updates a project's indexing parameters (extensions, include/exclude patterns, max file size).
 
 The `remove_project` MCP tool deletes the JSON file and removes indexed chunks.
 
-Changes to the `projects/` directory are detected at runtime and trigger an automatic config reload.
+Changes to the projects directory are detected at runtime and trigger an automatic reload.
 
-### `mcp`
+## MCP server
 
-Gnostis only supports the `streamable-http` MCP transport. The endpoint is `/mcp`.
+The MCP server name is hardcoded to `gnostis`. The version is set at build time from the git commit hash.
 
-- `name`: server name. Default: `gnostis`.
-- `version`: server version. Default: short git commit hash at build time.
-- `address`: listen address. Default: `127.0.0.1:8080`, or `127.0.0.1:${GNOSTIS_PORT}`.
-- `token`: optional Bearer token. When set, clients must send `Authorization: Bearer <token>`.
+Gnostis supports the `streamable-http` MCP transport at the `/mcp` endpoint, plus a stdio proxy mode.
 
-### `memory`
+## Memory
 
-Opt-in indexing of chat/dialogue memory. Memory is stored and indexed separately from project code in the hardcoded directory `~/.gnostis/data/memory`.
+Opt-in indexing of chat/dialogue memory. Memory is stored separately from project code in `~/.gnostis/data/memory`.
 
 Each provider has the same options:
 
-- `enabled`: when `true`, Gnostis decrypts/export files and indexes them into the isolated memory store. Default: `false`.
-- `source_dirs`: list of directories containing provider-specific files (e.g. `.pb` files for cascade). Default: provider-specific discovery (for cascade, existing `~/.codeium/{windsurf,windsurf-next,devin,devin-desktop}/cascade` directories).
-- `min_user_message_length`: shortest user message to keep in the dialogue section. Default: `10`.
+- `enabled`: when `true`, Gnostis indexes provider files into the isolated memory store.
+- `source_dirs`: comma-separated list of directories containing provider-specific files.
+- `min_user_message_length`: shortest user message to keep. Default: `10`.
 
 Supported providers:
 
 - `cascade`: Windsurf/Cascade/Devin Desktop conversation trajectories.
 - `cursor`: placeholder for future Cursor support.
-
-You can also export cascade sessions manually without enabling auto-indexing:
-
-```bash
-gnostis decrypt-cascade
-```
-
-To force a full reindex of memory, use the MCP tool `rebuild_memory`.
-
-To export to a different directory, set the `OUTPUT_DIR` variable in your shell.
-
-#### Migration from `cascade` config
-
-The old top-level `cascade` section is no longer supported. Rename it to `memory.cascade`. For example:
-
-```yaml
-# before
-cascade:
-  enabled: true
-  source_dirs:
-    - ~/.codeium/windsurf-next/cascade
-
-# after
-memory:
-  cascade:
-    enabled: true
-    source_dirs:
-      - ~/.codeium/windsurf-next/cascade
-```
-
-The `cascade-dialogues` synthetic project is also removed. After updating the config, run a full rebuild to clear old dialogue chunks from the project index.
 
 ## Filter precedence
 
@@ -209,8 +96,10 @@ The `cascade-dialogues` synthetic project is also removed. After updating the co
 4. `extensions`
 5. `max_file_size_mb`
 
-## Discovering projects
+## Default extensions and excludes
 
-Auto-discovery is configured in `config.yaml` by setting `auto: true` on a directory. Gnostis scans the directory and adds matching projects on startup. Changes to `config.yaml` are detected at runtime and reload automatically.
+When a project does not specify `extensions` or `exclude`, these built-in defaults apply:
 
-Alternatively, use the `discover_projects` MCP tool to preview which projects would be added under a given path.
+**Extensions:** `.go`, `.py`, `.js`, `.ts`, `.jsx`, `.tsx`, `.rs`, `.md`
+
+**Excludes:** `node_modules/**`, `.git/**`, `vendor/**`, `dist/**`, `build/**`, `__pycache__/**`

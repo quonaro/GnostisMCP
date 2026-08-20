@@ -11,6 +11,7 @@ import (
 
 // Project holds per-project indexing metadata.
 type Project struct {
+	Path          string    `json:"path"`
 	Chunks        int       `json:"chunks"`
 	LastIndexedAt time.Time `json:"last_indexed_at"`
 }

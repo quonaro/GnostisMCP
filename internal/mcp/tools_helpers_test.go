@@ -27,7 +27,7 @@ func TestToolError_StructuredJSON(t *testing.T) {
 }
 
 func TestIsPathAllowed_PrefixSiblings(t *testing.T) {
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, []project.Project{
+	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{
 		{Name: "tmp", Path: "/tmp"},
 	})
 

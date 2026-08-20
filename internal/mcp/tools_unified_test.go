@@ -10,7 +10,7 @@ import (
 )
 
 func TestUnifiedSearch_EmptyQuery(t *testing.T) {
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.unifiedSearch(context.Background(), mcp.CallToolRequest{}, unifiedSearchArgs{Source: searchSourceAll})
 	if err != nil {
 		t.Fatalf("unifiedSearch: %v", err)
@@ -22,7 +22,7 @@ func TestUnifiedSearch_EmptyQuery(t *testing.T) {
 }
 
 func TestUnifiedSearch_InvalidSource(t *testing.T) {
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil, nil)
 	res, err := srv.unifiedSearch(context.Background(), mcp.CallToolRequest{}, unifiedSearchArgs{Query: "x", Source: "bad"})
 	if err != nil {
 		t.Fatalf("unifiedSearch: %v", err)
@@ -45,7 +45,7 @@ func TestUnifiedSearch_Code(t *testing.T) {
 		Score:     0.9,
 		Content:   "func Bar() {}",
 	}}}
-	srv := New("test", "1.0.0", mock, nil, nil, nil, nil)
+	srv := New(mock, nil, nil, nil, nil)
 	res, err := srv.unifiedSearch(context.Background(), mcp.CallToolRequest{}, unifiedSearchArgs{Query: "bar", Source: searchSourceCode, IncludeContent: true})
 	if err != nil {
 		t.Fatalf("unifiedSearch: %v", err)
@@ -70,7 +70,7 @@ func TestUnifiedSearch_Docs(t *testing.T) {
 		Score:     0.85,
 		Content:   "readme",
 	}}}
-	srv := New("test", "1.0.0", mock, nil, nil, nil, nil)
+	srv := New(mock, nil, nil, nil, nil)
 	res, err := srv.unifiedSearch(context.Background(), mcp.CallToolRequest{}, unifiedSearchArgs{Query: "readme", Source: searchSourceDocs, IncludeContent: true})
 	if err != nil {
 		t.Fatalf("unifiedSearch: %v", err)
@@ -92,7 +92,7 @@ func TestUnifiedSearch_All_Deduplicates(t *testing.T) {
 		Score:     0.9,
 		Content:   "shared",
 	}}}
-	srv := New("test", "1.0.0", mock, nil, nil, nil, nil)
+	srv := New(mock, nil, nil, nil, nil)
 	res, err := srv.unifiedSearch(context.Background(), mcp.CallToolRequest{}, unifiedSearchArgs{Query: "shared", Source: searchSourceAll})
 	if err != nil {
 		t.Fatalf("unifiedSearch: %v", err)

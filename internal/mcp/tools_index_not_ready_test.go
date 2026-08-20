@@ -16,7 +16,7 @@ func TestQueryDocumentation_IndexNotReady(t *testing.T) {
 			Phase:  progress.PhaseEmbedding,
 		},
 	}
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil, nil)
 
 	res, err := srv.queryDocumentation(context.Background(), mcp.CallToolRequest{}, queryDocumentationArgs{
 		Query: "test query",
@@ -34,7 +34,7 @@ func TestQueryDocumentation_IndexNotReady(t *testing.T) {
 
 func TestQueryDocumentation_EmptyResults_IndexIdle(t *testing.T) {
 	mock := &mockIndexer{}
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil, nil)
 
 	res, err := srv.queryDocumentation(context.Background(), mcp.CallToolRequest{}, queryDocumentationArgs{
 		Query: "test query",
@@ -58,7 +58,7 @@ func TestSearchCodebase_IndexNotReady(t *testing.T) {
 			Phase:  progress.PhaseEmbedding,
 		},
 	}
-	srv := New("test", "1.0.0", &mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil, nil)
 
 	res, err := srv.searchCodebase(context.Background(), mcp.CallToolRequest{}, searchCodebaseArgs{
 		Query: "test query",

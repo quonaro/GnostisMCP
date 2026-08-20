@@ -166,36 +166,38 @@ Rebuild the entire index. The operation runs in the background and may take a wh
 
 **Returns:** object with `job_id`.
 
-## `discover_projects`
-
-Discover projects under a directory and show what would be added.
-
-**Parameters:**
-
-- `path` (string, required) — absolute directory path.
-- `depth` (int, optional, default 3)
-- `git` (bool, optional, default true)
-- `go` (bool, optional, default false)
-- `node_modules` (bool, optional, default false)
-- `venv` (bool, optional, default false)
-- `workspace` (bool, optional, default true)
-
-**Returns:** object with `new` and `already_added` arrays.
-
 ## `add_project`
 
-Add a directory to the index, write it to `config.yaml`, and start indexing it in the background.
+Add a directory as a project. Creates a JSON file in the projects directory. Does **not** start indexing — call `rebuild_project` separately.
 
 **Parameters:**
 
 - `path` (string, required) — absolute directory path.
 - `name` (string, optional) — project name, defaults to directory name.
+- `extensions` (array of strings, optional) — file extensions to index (e.g. `[".go", ".py"]`). Defaults to built-in set if empty.
+- `include` (array of strings, optional) — glob patterns; if set, only matching files are indexed.
+- `exclude` (array of strings, optional) — glob patterns to exclude from indexing.
+- `max_file_size_mb` (int, optional) — skip files larger than this. Default: 5.
 
-**Returns:** object with `added` and `job_id`.
+**Returns:** object with `added` and `name`.
+
+## `edit_project`
+
+Update a project's indexing parameters (extensions, include/exclude patterns, max file size). Does **not** re-index — call `rebuild_project` to apply changes.
+
+**Parameters:**
+
+- `name` (string, required) — project name.
+- `extensions` (array of strings, optional)
+- `include` (array of strings, optional)
+- `exclude` (array of strings, optional)
+- `max_file_size_mb` (int, optional)
+
+**Returns:** object with `edited` and `name`.
 
 ## `remove_project`
 
-Remove a project from the index and `config.yaml`.
+Remove a project from the index and delete its project JSON file.
 
 **Parameters:**
 

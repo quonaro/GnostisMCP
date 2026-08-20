@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/quonaro/gnostis/internal/chunker"
 	"github.com/quonaro/gnostis/internal/config"
@@ -23,6 +26,7 @@ import (
 	"github.com/quonaro/gnostis/internal/store"
 	"github.com/quonaro/gnostis/internal/symbol"
 	"github.com/quonaro/gnostis/internal/watcher"
+	"github.com/quonaro/gnostis/internal/web"
 )
 
 // App orchestrates configuration, indexing, search, and the MCP server.
@@ -39,11 +43,11 @@ type App struct {
 	watcher        *watcher.Watcher
 	memoryMgr      *memory.Manager
 	mcp            *mcpServer.Server
+	webSrv         *web.Server
 	embeddingCache map[string][]float32
 	progress       *progress.Progress
 	indexingStats  *stats.Stats
 	ProgressWriter io.Writer
-	ConfigPath     string
 
 	jobMu            sync.Mutex
 	jobRunning       bool
@@ -112,10 +116,14 @@ func New(cfg config.Config) (*App, error) {
 		a.memoryMgr = mgr
 	}
 
-	mcpSrv := mcpServer.New(cfg.MCP.Name, cfg.MCP.Version, engine, symbolIndex, a, a.memoryMgr, projects)
+	mcpSrv := mcpServer.New(engine, symbolIndex, a, a.memoryMgr, projects)
 	a.mcp = mcpSrv
 
 	a.watcher = a.newWatcher()
+
+	if cfg.Web.Enabled {
+		a.webSrv = web.New(a, engine, a.mcp.StreamableHTTPHandler())
+	}
 
 	return a, nil
 }
@@ -140,7 +148,7 @@ func (a *App) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -177,14 +185,44 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	}()
 
-	// StartStdio blocks until stdin is closed or SIGTERM/SIGINT is received.
-	if err := a.mcp.StartStdio(ctx); err != nil {
-		errCh <- fmt.Errorf("stdio server: %w", err)
+	if a.webSrv != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := a.webSrv.Start(ctx, a.cfg.Web.Port); err != nil && err != context.Canceled {
+				errCh <- fmt.Errorf("web server: %w", err)
+				cancel()
+			}
+		}()
+	}
+
+	if a.webSrv != nil {
+		// Web server is enabled: run stdio in background and block on
+		// OS signals so the app stays alive even when stdin is closed
+		// (e.g. under a task runner like lota dev).
+		go func() {
+			if err := a.mcp.StartStdio(ctx); err != nil && err != context.Canceled {
+				errCh <- fmt.Errorf("stdio server: %w", err)
+				cancel()
+			}
+		}()
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		select {
+		case <-sigCh:
+		case <-ctx.Done():
+		}
+	} else {
+		// No web server: block on stdin as before.
+		if err := a.mcp.StartStdio(ctx); err != nil {
+			errCh <- fmt.Errorf("stdio server: %w", err)
+		}
 	}
 	cancel()
 
 	wg.Wait()
 	close(errCh)
+
 	for err := range errCh {
 		return err
 	}
@@ -194,11 +232,14 @@ func (a *App) Run(ctx context.Context) error {
 func (a *App) initialIndex(ctx context.Context) error {
 	if state, err := a.progress.Load(); err != nil {
 		slog.ErrorContext(ctx, "load progress", "error", err)
-	} else if state.Status == progress.StatusRunning || state.Status == progress.StatusError {
+	} else if state.JobID != "" && (state.Status == progress.StatusRunning || state.Status == progress.StatusError) {
 		if state.Status == progress.StatusError {
 			slog.WarnContext(ctx, "previous indexing ended with error, resuming", "job_id", state.JobID, "error", state.Error)
 		}
 		return a.resumeInterruptedJob(ctx, state)
+	} else if state.JobID == "" && (state.Status == progress.StatusRunning || state.Status == progress.StatusError) {
+		slog.WarnContext(ctx, "previous indexing interrupted without job ID, re-indexing from scratch")
+		_ = a.progress.Reset()
 	}
 
 	a.cleanupDeletedFiles(ctx)

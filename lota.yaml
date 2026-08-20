@@ -3,17 +3,37 @@ build:
   script: |
     set -euo pipefail
 
+    echo "==> Building Svelte frontend..."
+    cd web && npm run build && cd ..
+    rm -rf internal/web/dist
+    cp -r web/dist internal/web/dist
+
     echo "==> Building Go binary..."
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
-    go build -ldflags="-s -w -X main.version=$COMMIT" -o gnostis ./cmd/gnostis
+    go build -ldflags="-s -w -X main.version=$COMMIT -X github.com/quonaro/gnostis/internal/mcp.version=$COMMIT" -o gnostis ./cmd/gnostis
 
     echo "==> Build complete: ./gnostis"
 
 dev:
   desc: Run gnostis with live reload
-  script: air
+  script: echo "Start development"
   vars:
   - "import:env .env"
+  parallel: true
+  depends:
+  - backend-dev
+  - frontend-dev
+
+backend-dev:
+  vars:
+  - "import:env .env"
+  show: false
+  script: air
+
+frontend-dev:
+  show: false
+  script: npm run dev
+  dir: web
 
 push:
   desc: Push to GitHub

@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/quonaro/gnostis/internal/discover"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/stats"
 )
@@ -165,83 +163,24 @@ func (s *Server) rebuildIndex(ctx context.Context, request mcp.CallToolRequest, 
 	return mcp.NewToolResultText(fmt.Sprintf(`{"job_id":%q}`, jobID)), nil
 }
 
-type discoverProjectsArgs struct {
-	Path        string `json:"path"`
-	Depth       int    `json:"depth"`
-	Git         bool   `json:"git"`
-	Go          bool   `json:"go"`
-	NodeModules bool   `json:"node_modules"`
-	Venv        bool   `json:"venv"`
-	Workspace   bool   `json:"workspace"`
-}
-
-func discoverProjectsTool() mcp.Tool {
-	return mcp.NewTool("discover_projects",
-		mcp.WithDescription("Discover projects under a directory and show what would be added"),
-		mcp.WithString("path", mcp.Required(), mcp.Description("Absolute directory path to scan")),
-		mcp.WithNumber("depth", mcp.Description("Maximum recursion depth"), mcp.DefaultNumber(3)),
-		mcp.WithBoolean("git", mcp.Description("Detect .git repositories"), mcp.DefaultBool(true)),
-		mcp.WithBoolean("go", mcp.Description("Detect go.mod directories"), mcp.DefaultBool(false)),
-		mcp.WithBoolean("node_modules", mcp.Description("Detect node_modules directories"), mcp.DefaultBool(false)),
-		mcp.WithBoolean("venv", mcp.Description("Detect .venv directories"), mcp.DefaultBool(false)),
-		mcp.WithBoolean("workspace", mcp.Description("Detect .code-workspace files"), mcp.DefaultBool(true)),
-	)
-}
-
-func (s *Server) discoverProjects(ctx context.Context, request mcp.CallToolRequest, args discoverProjectsArgs) (*mcp.CallToolResult, error) {
-	slog.InfoContext(ctx, "mcp tool call", "tool", "discover_projects", "path", args.Path)
-	if s.indexer == nil {
-		return toolError(errReasonNotConfigured, "indexer is not configured", "check the Gnostis configuration"), nil
-	}
-	if args.Path == "" {
-		return toolError(errReasonInvalidArgument, "path is required", "provide an absolute directory path"), nil
-	}
-
-	root, err := s.resolveAbsolutePath(args.Path)
-	if err != nil {
-		return toolError(errReasonInvalidArgument, err.Error(), "provide an absolute directory path"), nil
-	}
-	if info, err := os.Stat(root); err != nil || !info.IsDir() {
-		if err != nil {
-			if os.IsNotExist(err) {
-				return toolError(errReasonPathNotFound, fmt.Sprintf("path not found: %s", root), "check the directory path"), nil
-			}
-			return toolError(errReasonReadFailed, err.Error(), "check permissions"), nil
-		}
-		return toolError(errReasonInvalidArgument, fmt.Sprintf("%s is not a directory", root), "provide a directory path"), nil
-	}
-
-	opts := discover.Options{
-		Git:         args.Git,
-		Go:          args.Go,
-		NodeModules: args.NodeModules,
-		Venv:        args.Venv,
-		Workspace:   args.Workspace,
-		Depth:       args.Depth,
-	}
-	result, err := s.indexer.DiscoverProjects(ctx, root, opts)
-	if err != nil {
-		slog.ErrorContext(ctx, "discover_projects failed", "root", root, "error", err)
-		return toolError(errReasonSearchFailed, err.Error(), "try again later"), nil
-	}
-
-	data, err := json.Marshal(result)
-	if err != nil {
-		return toolError(errReasonSearchFailed, err.Error(), "internal error marshalling discover result"), nil
-	}
-	return mcp.NewToolResultText(string(data)), nil
-}
-
 type addProjectArgs struct {
-	Path string `json:"path"`
-	Name string `json:"name"`
+	Path          string   `json:"path"`
+	Name          string   `json:"name"`
+	Extensions    []string `json:"extensions"`
+	Include       []string `json:"include"`
+	Exclude       []string `json:"exclude"`
+	MaxFileSizeMB int      `json:"max_file_size_mb"`
 }
 
 func addProjectTool() mcp.Tool {
 	return mcp.NewTool("add_project",
-		mcp.WithDescription("Add a directory to the index"),
+		mcp.WithDescription("Add a directory to the index. Does not start indexing — call rebuild_project separately."),
 		mcp.WithString("path", mcp.Required(), mcp.Description("Absolute directory path")),
 		mcp.WithString("name", mcp.Description("Project name (defaults to directory name)")),
+		mcp.WithArray("extensions", mcp.Description("File extensions to index (e.g. .go, .py). Defaults to standard set if empty.")),
+		mcp.WithArray("include", mcp.Description("Glob patterns to include (if set, only matching files are indexed)")),
+		mcp.WithArray("exclude", mcp.Description("Glob patterns to exclude from indexing")),
+		mcp.WithNumber("max_file_size_mb", mcp.Description("Skip files larger than this. Default: 5")),
 	)
 }
 
@@ -254,13 +193,49 @@ func (s *Server) addProject(ctx context.Context, request mcp.CallToolRequest, ar
 		return toolError(errReasonInvalidArgument, "path is required", "provide an absolute directory path"), nil
 	}
 
-	name, err := s.indexer.AddProject(ctx, args.Path, args.Name)
+	name, err := s.indexer.AddProject(ctx, args.Path, args.Name, args.Extensions, args.Include, args.Exclude, args.MaxFileSizeMB)
 	if err != nil {
 		slog.ErrorContext(ctx, "add_project failed", "path", args.Path, "error", err)
 		return toolError(errReasonSearchFailed, err.Error(), "try again later or check the path"), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf(`{"added":true,"name":%q,"hint":"use rebuild_project to index"}`, name)), nil
+}
+
+type editProjectArgs struct {
+	Name          string   `json:"name"`
+	Extensions    []string `json:"extensions"`
+	Include       []string `json:"include"`
+	Exclude       []string `json:"exclude"`
+	MaxFileSizeMB int      `json:"max_file_size_mb"`
+}
+
+func editProjectTool() mcp.Tool {
+	return mcp.NewTool("edit_project",
+		mcp.WithDescription("Edit a project's indexing parameters (extensions, include/exclude patterns, max file size)"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Project name")),
+		mcp.WithArray("extensions", mcp.Description("File extensions to index (e.g. .go, .py). Defaults to standard set if empty.")),
+		mcp.WithArray("include", mcp.Description("Glob patterns to include (if set, only matching files are indexed)")),
+		mcp.WithArray("exclude", mcp.Description("Glob patterns to exclude from indexing")),
+		mcp.WithNumber("max_file_size_mb", mcp.Description("Skip files larger than this. Default: 5")),
+	)
+}
+
+func (s *Server) editProject(ctx context.Context, request mcp.CallToolRequest, args editProjectArgs) (*mcp.CallToolResult, error) {
+	slog.InfoContext(ctx, "mcp tool call", "tool", "edit_project", "name", args.Name)
+	if s.indexer == nil {
+		return toolError(errReasonNotConfigured, "indexer is not configured", "check the Gnostis configuration"), nil
+	}
+	if args.Name == "" {
+		return toolError(errReasonInvalidArgument, "name is required", "provide a project name from list_projects"), nil
+	}
+
+	if err := s.indexer.EditProject(ctx, args.Name, args.Extensions, args.Include, args.Exclude, args.MaxFileSizeMB); err != nil {
+		slog.ErrorContext(ctx, "edit_project failed", "name", args.Name, "error", err)
+		return toolError(errReasonSearchFailed, err.Error(), "try again later or check the project name"), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf(`{"edited":true,"name":%q,"hint":"use rebuild_project to re-index with new settings"}`, args.Name)), nil
 }
 
 type removeProjectArgs struct {

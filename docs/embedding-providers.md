@@ -7,6 +7,7 @@ Gnostis uses a provider interface so you can switch between local and remote emb
 ```go
 type Provider interface {
     Embed(ctx context.Context, texts []string) ([][]float32, error)
+    BatchSize() int
     ModelName() string
 }
 ```
@@ -15,11 +16,10 @@ type Provider interface {
 
 Recommended for local-first usage. Any model exposed through Ollama's OpenAI-compatible endpoint works.
 
-```yaml
-embeddings:
-  provider: ollama
-  url: http://localhost:11434/v1
-  model: nomic-embed-text
+```bash
+export GNOSTIS_EMBEDDINGS_PROVIDER=ollama
+export GNOSTIS_EMBEDDINGS_URL=http://localhost:11434/v1
+export GNOSTIS_EMBEDDINGS_MODEL=nomic-embed-text
 ```
 
 Install and run:
@@ -33,12 +33,11 @@ ollama serve
 
 Works with OpenAI, OpenRouter, LocalAI, LM Studio, and any other `/v1/embeddings` endpoint.
 
-```yaml
-embeddings:
-  provider: openai
-  url: https://api.openai.com/v1
-  model: text-embedding-3-small
-  api_key: ${OPENAI_API_KEY}
+```bash
+export GNOSTIS_EMBEDDINGS_PROVIDER=openai
+export GNOSTIS_EMBEDDINGS_URL=https://api.openai.com/v1
+export GNOSTIS_EMBEDDINGS_MODEL=text-embedding-3-small
+export GNOSTIS_EMBEDDINGS_API_KEY=$OPENAI_API_KEY
 ```
 
 ## Model recommendations

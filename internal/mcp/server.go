@@ -3,12 +3,12 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	mcpServer "github.com/mark3labs/mcp-go/server"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 
-	"github.com/quonaro/gnostis/internal/discover"
 	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
@@ -37,16 +37,25 @@ type Indexer interface {
 	ReindexFiles(ctx context.Context, paths []string) error
 	StartRebuildProject(ctx context.Context, name string) (string, error)
 	StartRebuildIndex(ctx context.Context) (string, error)
-	DiscoverProjects(ctx context.Context, root string, opts discover.Options) (discover.Result, error)
-	AddProject(ctx context.Context, path, name string) (string, error)
+	AddProject(ctx context.Context, path, name string, extensions, include, exclude []string, maxFileSizeMB int) (string, error)
+	EditProject(ctx context.Context, name string, extensions, include, exclude []string, maxFileSizeMB int) error
 	RemoveProject(ctx context.Context, name string) error
+}
+
+const serverName = "gnostis"
+
+// version is set by the build linker to the short git commit hash.
+var version string
+
+// SetVersion sets the server version. Called from main after the linker sets main.version.
+func SetVersion(v string) {
+	version = v
 }
 
 // Server wraps the mcp-go server and exposes Gnostis tools.
 type Server struct {
 	mu            sync.RWMutex
-	server        *mcpServer.MCPServer
-	name          string
+	server        *mcpserver.MCPServer
 	version       string
 	engine        Searcher
 	symbols       Finder
@@ -56,10 +65,9 @@ type Server struct {
 }
 
 // New creates and configures the MCP server.
-func New(name, version string, engine Searcher, symbols Finder, indexer Indexer, memoryManager *memory.Manager, projects []project.Project) *Server {
-	slog.Info("creating mcp server", "name", name, "version", version)
+func New(engine Searcher, symbols Finder, indexer Indexer, memoryManager *memory.Manager, projects []project.Project) *Server {
+	slog.Info("creating mcp server", "name", serverName, "version", version)
 	s := &Server{
-		name:          name,
 		version:       version,
 		engine:        engine,
 		symbols:       symbols,
@@ -68,10 +76,10 @@ func New(name, version string, engine Searcher, symbols Finder, indexer Indexer,
 		projects:      projects,
 	}
 
-	s.server = mcpServer.NewMCPServer(
-		name,
+	s.server = mcpserver.NewMCPServer(
+		serverName,
 		version,
-		mcpServer.WithToolCapabilities(false),
+		mcpserver.WithToolCapabilities(false),
 	)
 	s.registerTools()
 
@@ -95,8 +103,20 @@ func (s *Server) ReloadMemoryManager(mgr *memory.Manager) {
 // StartStdio runs the MCP server over stdio. It blocks until stdin is closed
 // or SIGTERM/SIGINT is received.
 func (s *Server) StartStdio(ctx context.Context) error {
-	slog.InfoContext(ctx, "starting mcp stdio server", "name", s.name, "version", s.version)
-	return mcpServer.ServeStdio(s.server)
+	slog.InfoContext(ctx, "starting mcp stdio server", "name", serverName, "version", s.version)
+	return mcpserver.ServeStdio(s.server)
+}
+
+// StreamableHTTPHandler returns an http.Handler that serves MCP over the
+// Streamable HTTP transport. Multiple editors can connect to the same
+// endpoint without spawning separate gnostis processes.
+func (s *Server) StreamableHTTPHandler() http.Handler {
+	slog.Info("creating mcp streamable http handler", "name", serverName, "version", s.version)
+	srv := mcpserver.NewStreamableHTTPServer(
+		s.server,
+		mcpserver.WithStateful(true),
+	)
+	return srv
 }
 
 func (s *Server) registerTools() {
@@ -120,8 +140,8 @@ func (s *Server) registerTools() {
 	s.server.AddTool(getIndexJobTool(), mcp.NewTypedToolHandler(s.getIndexJob))
 	s.server.AddTool(rebuildProjectTool(), mcp.NewTypedToolHandler(s.rebuildProject))
 	s.server.AddTool(rebuildIndexTool(), mcp.NewTypedToolHandler(s.rebuildIndex))
-	s.server.AddTool(discoverProjectsTool(), mcp.NewTypedToolHandler(s.discoverProjects))
 	s.server.AddTool(addProjectTool(), mcp.NewTypedToolHandler(s.addProject))
+	s.server.AddTool(editProjectTool(), mcp.NewTypedToolHandler(s.editProject))
 	s.server.AddTool(removeProjectTool(), mcp.NewTypedToolHandler(s.removeProject))
 	s.server.AddTool(memorySearchTool(), mcp.NewTypedToolHandler(s.memorySearch))
 	s.server.AddTool(memoryWriteTool(), mcp.NewTypedToolHandler(s.memoryWrite))
