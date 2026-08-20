@@ -29,7 +29,7 @@ func (a *App) RebuildProject(ctx context.Context, name string) error {
 			return fmt.Errorf("delete project chunks: %w", err)
 		}
 
-		if err := indexDirectory(ctx, a.ProgressWriter, a.dirs[i], p, a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.embeddingCache, a.progress, a.indexingStats); err != nil {
+		if err := indexDirectoryWithRetry(ctx, a.ProgressWriter, a.dirs[i], p, a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.embeddingCache, a.progress, a.indexingStats); err != nil {
 			return fmt.Errorf("index %s: %w", a.dirs[i].Path, err)
 		}
 
@@ -128,8 +128,8 @@ func (a *App) startJobWithID(ctx context.Context, id string, fn func(context.Con
 	return id, nil
 }
 
-// resumeInterruptedJob restarts a rebuild that was in progress when the
-// previous process exited. It expects progress.Status to be Running.
+// resumeInterruptedJob restarts a rebuild that was in progress or failed when
+// the previous process exited. It expects progress.Status to be Running or Error.
 func (a *App) resumeInterruptedJob(ctx context.Context, state progress.State) error {
 	slog.InfoContext(ctx, "resuming interrupted rebuild", "job_id", state.JobID, "project", state.Project)
 
@@ -207,7 +207,7 @@ func (a *App) rebuildDirectory(ctx context.Context, dirPath string) error {
 	dir := directory.FromConfig(a.cfg.Index, config.Directory{Path: dirPath, Name: filepath.Base(dirPath)})
 	proj := project.New(filepath.Base(dirPath), dirPath)
 
-	if err := indexDirectory(ctx, a.ProgressWriter, dir, proj, a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.embeddingCache, nil, a.indexingStats); err != nil {
+	if err := indexDirectoryWithRetry(ctx, a.ProgressWriter, dir, proj, a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.embeddingCache, nil, a.indexingStats); err != nil {
 		return fmt.Errorf("index directory: %w", err)
 	}
 

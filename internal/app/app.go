@@ -194,25 +194,30 @@ func (a *App) Run(ctx context.Context) error {
 func (a *App) initialIndex(ctx context.Context) error {
 	if state, err := a.progress.Load(); err != nil {
 		slog.ErrorContext(ctx, "load progress", "error", err)
-	} else if state.Status == progress.StatusRunning {
+	} else if state.Status == progress.StatusRunning || state.Status == progress.StatusError {
+		if state.Status == progress.StatusError {
+			slog.WarnContext(ctx, "previous indexing ended with error, resuming", "job_id", state.JobID, "error", state.Error)
+		}
 		return a.resumeInterruptedJob(ctx, state)
 	}
 
 	a.cleanupDeletedFiles(ctx)
+	var firstErr error
 	for i, dir := range a.dirs {
 		slog.InfoContext(ctx, "indexing directory", "path", dir.Path, "project", a.projects[i].Name)
-		if err := indexDirectory(ctx, a.ProgressWriter, dir, a.projects[i], a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.embeddingCache, a.progress, a.indexingStats); err != nil {
-			if a.progress != nil {
-				_ = a.progress.Fail(err)
+		if err := indexDirectoryWithRetry(ctx, a.ProgressWriter, dir, a.projects[i], a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.embeddingCache, a.progress, a.indexingStats); err != nil {
+			slog.ErrorContext(ctx, "index project failed, continuing to next", "project", a.projects[i].Name, "error", err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("index %s: %w", dir.Path, err)
 			}
-			return fmt.Errorf("index %s: %w", dir.Path, err)
+			continue
 		}
 	}
 	if err := a.symbolIndex.Save(); err != nil {
 		slog.ErrorContext(ctx, "save symbol index", "error", err)
 	}
 	slog.InfoContext(ctx, "initial index complete", "chunks", a.store.Count())
-	return nil
+	return firstErr
 }
 
 // InitialIndex performs the first-time indexing of all configured directories.

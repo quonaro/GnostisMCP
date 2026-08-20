@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/quonaro/gnostis/internal/chunker"
 	"github.com/quonaro/gnostis/internal/config"
@@ -23,6 +24,34 @@ import (
 	"github.com/quonaro/gnostis/internal/symbol"
 	"github.com/schollz/progressbar/v2"
 )
+
+const maxIndexRetries = 3
+
+var indexBackoff = []time.Duration{
+	1 * time.Second,
+	2 * time.Second,
+	4 * time.Second,
+}
+
+func indexDirectoryWithRetry(ctx context.Context, out io.Writer, dir directory.Directory, proj project.Project, idx *indexer.Indexer, ch *chunker.Chunker, provider embeddings.Provider, st store.VectorStore, sym *symbol.Index, cache map[string][]float32, prog *progress.Progress, indexingStats *stats.Stats) error {
+	var lastErr error
+	for attempt := 0; attempt < maxIndexRetries; attempt++ {
+		err := indexDirectory(ctx, out, dir, proj, idx, ch, provider, st, sym, cache, prog, indexingStats)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if attempt < maxIndexRetries-1 {
+			slog.WarnContext(ctx, "index attempt failed, retrying", "project", proj.Name, "attempt", attempt+1, "error", err, "backoff", indexBackoff[attempt])
+			select {
+			case <-time.After(indexBackoff[attempt]):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+	return lastErr
+}
 
 func indexDirectory(ctx context.Context, out io.Writer, dir directory.Directory, proj project.Project, idx *indexer.Indexer, ch *chunker.Chunker, provider embeddings.Provider, st store.VectorStore, sym *symbol.Index, cache map[string][]float32, prog *progress.Progress, indexingStats *stats.Stats) error {
 	if prog != nil {
