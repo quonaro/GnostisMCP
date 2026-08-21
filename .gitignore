@@ -40,3 +40,6 @@ tmp/
 # Web frontend
 web/node_modules/
 web/dist/
+internal/web/dist/
+!internal/web/dist/.gitkeep
+!internal/web/dist/index.html
