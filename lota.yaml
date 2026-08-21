@@ -48,16 +48,3 @@ push:
     else
       git push origin main
     fi
-
-service:
-  install:
-    depends:
-    - "build"
-    script: |
-      systemctl --user stop gnostis && ./gnostis install && systemctl --user start gnostis
-  stop:
-    script: |
-      systemctl --user stop gnostis
-  start:
-    script: |
-      systemctl --user start gnostis
