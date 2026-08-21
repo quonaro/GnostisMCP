@@ -33,15 +33,25 @@ func (s *Server) handleSPA() http.Handler {
 		}
 
 		if path == "/" {
-			r.URL.Path = "/index.html"
-			fileServer.ServeHTTP(w, r)
+			data, err := fs.ReadFile(sub, "index.html")
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(data)
 			return
 		}
 
 		cleanPath := strings.TrimPrefix(path, "/")
 		if _, err := fs.Stat(sub, cleanPath); err != nil {
-			r.URL.Path = "/index.html"
-			fileServer.ServeHTTP(w, r)
+			data, err := fs.ReadFile(sub, "index.html")
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(data)
 			return
 		}
 
