@@ -69,7 +69,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 
 	var lastPayload []byte
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	flusher, ok := w.(http.Flusher)
@@ -79,13 +79,37 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	send := func() error {
+		projects, chunks := s.app.Status()
+		provider, model, symbols := s.app.Info()
+
 		pstate, err := s.app.ProgressState()
 		if err != nil {
 			return fmt.Errorf("progress state: %w", err)
 		}
-		payload, err := json.Marshal(pstate)
+
+		pst, err := s.app.ProjectStats(ctx)
 		if err != nil {
-			return fmt.Errorf("marshal progress: %w", err)
+			return fmt.Errorf("project stats: %w", err)
+		}
+
+		eta := pstate.ETA()
+		resp := statusResponse{
+			Projects:     projects,
+			TotalChunks:  chunks,
+			Provider:     provider,
+			Model:        model,
+			Symbols:      symbols,
+			Progress:     pstate,
+			ProjectStats: pst,
+		}
+		if eta > 0 {
+			resp.ETA = eta.String()
+			resp.ETASeconds = int64(eta.Seconds())
+		}
+
+		payload, err := json.Marshal(resp)
+		if err != nil {
+			return fmt.Errorf("marshal status: %w", err)
 		}
 		if string(payload) == string(lastPayload) {
 			return nil

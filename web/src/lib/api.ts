@@ -134,7 +134,7 @@ export async function search(query: string, topK = 10, project?: string): Promis
   return fetchJSON<SearchResponse>(`${API_BASE}/search?${params}`)
 }
 
-export function subscribeToEvents(onMessage: (state: ProgressState) => void): () => void {
+export function subscribeToEvents(onMessage: (state: StatusResponse) => void): () => void {
   const es = new EventSource(`${API_BASE}/events`)
   es.onmessage = (e) => {
     try {

@@ -14,10 +14,8 @@
   onMount(() => {
     refreshStatus()
     closeEs = initEventSource()
-    const interval = setInterval(refreshStatus, 5000)
 
     return () => {
-      clearInterval(interval)
       closeEs?.()
     }
   })

@@ -70,13 +70,20 @@ func main() {
 	// gnostis process while keeping the stdio MCP config format.
 	flock := lock.New(cfg.DataDir)
 	if err := flock.TryLock(); err != nil {
-		slog.Info("another gnostis instance is running, starting stdio proxy", "data_dir", cfg.DataDir)
-		mcpURL := fmt.Sprintf("http://localhost:%d/mcp", cfg.Web.Port)
-		if err := runStdioProxy(mcpURL); err != nil {
-			fmt.Fprintf(os.Stderr, "stdio proxy: %v\n", err)
-			os.Exit(1)
+		if stalePID := flock.StalePID(); stalePID > 0 {
+			slog.Info("removing stale lock file", "stale_pid", stalePID, "data_dir", cfg.DataDir)
+			_ = os.Remove(filepath.Join(cfg.DataDir, ".lock"))
+			err = flock.TryLock()
 		}
-		return
+		if err != nil {
+			slog.Info("another gnostis instance is running, starting stdio proxy", "data_dir", cfg.DataDir)
+			mcpURL := fmt.Sprintf("http://localhost:%d/mcp", cfg.Web.Port)
+			if err := runStdioProxy(mcpURL); err != nil {
+				fmt.Fprintf(os.Stderr, "stdio proxy: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
 	}
 	defer func() { _ = flock.Unlock() }()
 	slog.Info("acquired data dir lock, running as primary", "data_dir", cfg.DataDir)

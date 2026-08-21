@@ -40,6 +40,10 @@ func (l *Lock) TryLock() error {
 		}
 		return fmt.Errorf("acquire lock: %w", err)
 	}
+	// Lock acquired — write our PID so stale locks can be detected.
+	_, _ = f.Seek(0, 0)
+	_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
+	_ = f.Truncate(int64(len(fmt.Sprintf("%d\n", os.Getpid()))))
 	l.file = f
 	return nil
 }
@@ -66,6 +70,26 @@ func (l *Lock) TryRLock() error {
 	}
 	l.file = f
 	return nil
+}
+
+// StalePID checks if the lock file contains a PID for a process that no longer
+// exists. Returns the PID if stale, 0 otherwise.
+func (l *Lock) StalePID() int {
+	data, err := os.ReadFile(l.path)
+	if err != nil {
+		return 0
+	}
+	var pid int
+	if _, err := fmt.Sscanf(string(data), "%d", &pid); err != nil {
+		return 0
+	}
+	if pid <= 0 {
+		return 0
+	}
+	if err := unix.Kill(pid, 0); err != nil {
+		return pid
+	}
+	return 0
 }
 
 // Unlock releases the lock and closes the underlying file.

@@ -29,21 +29,20 @@ export function dismissToast(id: number) {
 }
 
 export async function refreshStatus() {
-  loading.set(true)
-  error.set(null)
   try {
     const s = await getStatus()
     status.set(s)
     progress.set(s.progress)
   } catch (e) {
     error.set(String(e))
-  } finally {
-    loading.set(false)
   }
 }
 
 export function initEventSource() {
-  return subscribeToEvents((state) => {
-    progress.set(state)
+  return subscribeToEvents((s) => {
+    status.set(s)
+    progress.set(s.progress)
+    loading.set(false)
+    error.set(null)
   })
 }

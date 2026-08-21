@@ -202,16 +202,12 @@ func (a *App) Run(ctx context.Context) error {
 		// (e.g. under a task runner like lota dev).
 		go func() {
 			if err := a.mcp.StartStdio(ctx); err != nil && err != context.Canceled {
-				errCh <- fmt.Errorf("stdio server: %w", err)
-				cancel()
+				slog.WarnContext(ctx, "stdio server ended", "error", err)
 			}
 		}()
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		select {
-		case <-sigCh:
-		case <-ctx.Done():
-		}
+		<-sigCh
 	} else {
 		// No web server: block on stdin as before.
 		if err := a.mcp.StartStdio(ctx); err != nil {
