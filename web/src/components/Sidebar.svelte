@@ -1,21 +1,9 @@
 <script lang="ts">
-  import { activeSection, progress, status, searchOpen, type Section } from '../lib/stores'
-  import { LayoutGrid, Activity, Network, Building2, Trash2, GitBranch, Search as SearchIcon } from '@lucide/svelte'
+  import { activeSection, searchOpen, type Section } from '../lib/stores'
+  import { LayoutGrid, Network, Building2, Trash2, GitBranch, Search as SearchIcon } from '@lucide/svelte'
   import type { Snippet } from 'svelte'
 
   let section = $derived($activeSection)
-  let p = $derived($progress)
-  let s = $derived($status)
-
-  let isRunning = $derived(p?.status === 'running')
-  let isDone = $derived(p?.status === 'done')
-  let isError = $derived(p?.status === 'error')
-
-  let pct = $derived(
-    p && p.total_chunks > 0
-      ? Math.round((p.done_chunks / p.total_chunks) * 100)
-      : 0,
-  )
 
   const items: { id: Section; label: string; icon: typeof LayoutGrid }[] = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
@@ -61,21 +49,4 @@
     {/each}
   </nav>
 
-  <div class="p-3 border-t border-border shrink-0 space-y-2">
-    <div class="flex items-center gap-2 text-xs">
-      <Activity class="w-3.5 h-3.5 text-muted-foreground" />
-      <span class="text-muted-foreground">Indexer</span>
-      <span
-        class="ml-auto inline-block w-2 h-2 rounded-full {isRunning ? 'bg-warning animate-pulse' : isDone ? 'bg-success' : isError ? 'bg-destructive' : 'bg-muted-foreground/40'}"
-      ></span>
-    </div>
-    {#if isRunning}
-      <div class="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
-        <div class="h-full bg-primary rounded-full transition-all duration-500" style="width: {pct}%"></div>
-      </div>
-      <div class="text-[10px] text-muted-foreground">{pct}% · {p?.done_chunks ?? 0}/{p?.total_chunks ?? 0} chunks</div>
-    {:else if s}
-      <div class="text-[10px] text-muted-foreground">{s.total_chunks.toLocaleString()} chunks · {s.projects.length} projects</div>
-    {/if}
-  </div>
 </aside>

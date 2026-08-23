@@ -218,7 +218,6 @@ func chunkFilesParallel(ctx context.Context, files []indexer.FileInfo, ch *chunk
 		}
 		if storedHash == f.Hash {
 			if cg.HasFile(f.Path) {
-				slog.DebugContext(ctx, "skipping unchanged file", "path", f.Path)
 				progressAdd(bar, prog, 1, &progressMu)
 				continue
 			}

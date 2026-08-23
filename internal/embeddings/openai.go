@@ -8,18 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 )
-
-const debugBodyMaxLen = 2000
-
-func truncateForDebug(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "... [truncated]"
-}
 
 // openAICompatible is an HTTP client for OpenAI-compatible /v1/embeddings endpoints.
 type openAICompatible struct {
@@ -66,12 +56,7 @@ func (p *openAICompatible) Embed(ctx context.Context, texts []string) ([][]float
 		}
 		batchNum := i/p.batchSize + 1
 
-		previews := make([]string, 0, end-i)
-		for _, text := range texts[i:end] {
-			preview := strings.ReplaceAll(text, "\n", "\\n")
-			previews = append(previews, truncateForDebug(preview, 120))
-		}
-		slog.DebugContext(ctx, "embedding batch", "batch", batchNum, "of", batches, "size", end-i, "previews", previews)
+		slog.DebugContext(ctx, "embedding batch", "batch", batchNum, "of", batches, "size", end-i)
 
 		batch, err := p.embedBatch(ctx, texts[i:end])
 		if err != nil {

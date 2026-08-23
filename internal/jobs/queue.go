@@ -37,6 +37,7 @@ type Queue struct {
 	jobs       []Job
 	notify     chan struct{}
 	maxHistory int
+	done       *sync.Cond
 }
 
 // New creates a queue that retains up to maxHistory completed jobs.
@@ -44,10 +45,12 @@ func New(maxHistory int) *Queue {
 	if maxHistory <= 0 {
 		maxHistory = 20
 	}
-	return &Queue{
+	q := &Queue{
 		notify:     make(chan struct{}, 1),
 		maxHistory: maxHistory,
 	}
+	q.done = sync.NewCond(&q.mu)
+	return q
 }
 
 // Submit adds a job to the queue and returns its ID.
@@ -96,6 +99,29 @@ func (q *Queue) RunningJobID() string {
 	return ""
 }
 
+// Wait blocks until the job with the given ID is no longer running or pending.
+// It returns true if the job was found and reached a terminal state.
+func (q *Queue) Wait(id string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for {
+		found := false
+		for i := range q.jobs {
+			if q.jobs[i].ID == id {
+				found = true
+				if q.jobs[i].Status == StatusDone || q.jobs[i].Status == StatusFailed {
+					return true
+				}
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+		q.done.Wait()
+	}
+}
+
 // Start launches the worker goroutine. It blocks until ctx is cancelled.
 func (q *Queue) Start(ctx context.Context) {
 	for {
@@ -141,6 +167,7 @@ func (q *Queue) processNext(ctx context.Context) {
 	}
 	q.jobs[idx].fn = nil
 	q.prune()
+	q.done.Broadcast()
 	q.mu.Unlock()
 
 	if err == nil {

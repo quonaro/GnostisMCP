@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { status, pushToast } from '../lib/stores'
+  import { status, memoryProgress, pushToast } from '../lib/stores'
   import { getMemoryFiles, openMemoryFile, type MemoryFile } from '../lib/api'
   import Card from './ui/Card.svelte'
   import Badge from './ui/Badge.svelte'
-  import { MessageSquare, FileText, Hash, ExternalLink, ChevronDown, ChevronRight } from '@lucide/svelte'
+  import { MessageSquare, FileText, Hash, ExternalLink, ChevronDown, ChevronRight, AlertCircle, Loader2 } from '@lucide/svelte'
 
   let s = $derived($status)
   let memStats = $derived(s?.memory_stats ?? [])
@@ -15,6 +15,15 @@
 
   let totalFiles = $derived(memStats.reduce((sum, st) => sum + st.files, 0))
   let totalChunks = $derived(memStats.reduce((sum, st) => sum + st.chunks, 0))
+
+  let mp = $derived($memoryProgress)
+  let memSyncRunning = $derived(mp?.status === 'running')
+  let memSyncError = $derived(mp?.status === 'error')
+  let memFilePct = $derived(
+    mp && mp.total_files > 0
+      ? Math.round((mp.done_files / mp.total_files) * 100)
+      : 0,
+  )
 
   async function loadFiles() {
     if (loadingFiles) return
@@ -64,8 +73,35 @@
   <Card class="p-4">
     <div class="flex items-center gap-2 mb-3">
       <MessageSquare class="w-4 h-4 text-muted-foreground" />
-      <h2 class="text-sm font-semibold text-muted-foreground uppercase">Memory Index</h2>
+      <h2 class="text-sm font-semibold text-muted-foreground uppercase">Memory</h2>
     </div>
+
+    {#if memSyncError && mp?.error}
+      <div class="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-2 text-sm text-destructive mb-3">
+        <AlertCircle class="w-4 h-4 shrink-0 mt-0.5" />
+        {mp.error}
+      </div>
+    {/if}
+
+    {#if memSyncRunning && mp}
+      <div class="mb-3">
+        <div class="flex items-center gap-2 mb-1">
+          <Loader2 class="w-3 h-3 animate-spin text-warning" />
+          <span class="text-xs text-muted-foreground">Syncing dialogues</span>
+          {#if mp.total_files > 0}
+            <span class="text-xs text-muted-foreground ml-auto">{mp.done_files.toLocaleString()} / {mp.total_files.toLocaleString()}</span>
+          {/if}
+        </div>
+        {#if mp.total_files > 0}
+          <div class="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
+            <div
+              class="h-full rounded-full bg-warning transition-all duration-500"
+              style="width: {memFilePct}%"
+            ></div>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="space-y-2">
       {#each memStats as stat}

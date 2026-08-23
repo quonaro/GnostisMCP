@@ -46,7 +46,7 @@ func (a *App) RebuildProject(ctx context.Context, name string) error {
 
 // StartRebuildProject starts a rebuild job for a single project and returns a job ID.
 func (a *App) StartRebuildProject(ctx context.Context, name string) (string, error) {
-	desc := fmt.Sprintf("Rebuild project: %s", name)
+	desc := fmt.Sprintf("Reindex project: %s", name)
 	id := a.jobQueue.Submit("project:"+name, desc, func(jobCtx context.Context) error {
 		a.rebuildMu.Lock()
 		defer a.rebuildMu.Unlock()
@@ -90,7 +90,7 @@ func (a *App) RebuildIndex(ctx context.Context) error {
 
 // StartRebuildIndex starts a full rebuild job and returns a job ID.
 func (a *App) StartRebuildIndex(ctx context.Context) (string, error) {
-	desc := "Rebuild all projects"
+	desc := "Reindex all projects"
 	id := a.jobQueue.Submit("index", desc, func(jobCtx context.Context) error {
 		a.rebuildMu.Lock()
 		defer a.rebuildMu.Unlock()

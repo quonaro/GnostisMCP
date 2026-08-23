@@ -188,13 +188,30 @@ func (a *App) Run(ctx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		a.rebuildMu.Lock()
-		if err := a.initialIndex(ctx); err != nil {
-			a.rebuildMu.Unlock()
+
+		indexDone := make(chan error, 1)
+		a.jobQueue.Submit("index", "Initial index", func(jobCtx context.Context) error {
+			a.rebuildMu.Lock()
+			defer a.rebuildMu.Unlock()
+			a.progress.SetJobID("index")
+			err := a.initialIndex(jobCtx)
+			indexDone <- err
+			return err
+		})
+
+		if err := <-indexDone; err != nil {
 			errCh <- fmt.Errorf("initial index: %w", err)
 			cancel()
 			return
 		}
+
+		// If initialIndex delegated to resumeInterruptedJob, wait for that
+		// job to finish before starting the watcher.
+		if state, loadErr := a.progress.Load(); loadErr == nil && state.JobID != "" && state.JobID != "index" {
+			a.jobQueue.Wait(state.JobID)
+		}
+
+		a.rebuildMu.Lock()
 		if err := a.watcher.Start(); err != nil {
 			a.rebuildMu.Unlock()
 			errCh <- fmt.Errorf("start watcher: %w", err)
@@ -291,11 +308,4 @@ func (a *App) initialIndex(ctx context.Context) error {
 	a.saveSimhashIndex()
 	slog.InfoContext(ctx, "initial index complete", "chunks", a.store.Count())
 	return firstErr
-}
-
-// InitialIndex performs the first-time indexing of all configured directories.
-func (a *App) InitialIndex(ctx context.Context) error {
-	a.rebuildMu.Lock()
-	defer a.rebuildMu.Unlock()
-	return a.initialIndex(ctx)
 }

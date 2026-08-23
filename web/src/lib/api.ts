@@ -144,7 +144,7 @@ export async function getStatus(): Promise<StatusResponse> {
   return fetchJSON<StatusResponse>(`${API_BASE}/status`)
 }
 
-export async function rebuildProject(name: string): Promise<JobResponse> {
+export async function reindexProject(name: string): Promise<JobResponse> {
   return fetchJSON<JobResponse>(`${API_BASE}/rebuild/project`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -152,7 +152,7 @@ export async function rebuildProject(name: string): Promise<JobResponse> {
   })
 }
 
-export async function rebuildIndex(): Promise<JobResponse> {
+export async function reindexAll(): Promise<JobResponse> {
   return fetchJSON<JobResponse>(`${API_BASE}/rebuild/index`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

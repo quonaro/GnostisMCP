@@ -199,10 +199,7 @@ func (m *Manager) syncAll(ctx context.Context, skip map[string]struct{}) error {
 	m.progress.start(len(files))
 
 	var exported int
-	for i, path := range files {
-		if i%10 == 0 {
-			slog.DebugContext(ctx, "syncing memory", "done", i, "total", len(files))
-		}
+	for _, path := range files {
 		if err := m.exportFile(ctx, path); err != nil {
 			slog.ErrorContext(ctx, "export memory file", "path", path, "error", err)
 			continue
@@ -236,7 +233,6 @@ func (m *Manager) exportFile(ctx context.Context, path string) error {
 			if err != nil {
 				return fmt.Errorf("export %s: %w", p.Name(), err)
 			}
-			slog.DebugContext(ctx, "memory export", "provider", p.Name(), "source", path, "md", mdPath)
 			if err := m.indexer.IndexFile(ctx, p.Name(), mdPath, m.provider, m.cache); err != nil {
 				return fmt.Errorf("index %s: %w", p.Name(), err)
 			}

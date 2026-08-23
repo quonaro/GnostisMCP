@@ -1,6 +1,6 @@
 <script lang="ts">
   import { status, progress, pushToast } from '../lib/stores'
-  import { rebuildProject, rebuildIndex, removeProject, openProject } from '../lib/api'
+  import { reindexProject, reindexAll, removeProject, openProject } from '../lib/api'
   import { refreshStatus } from '../lib/stores'
   import Card from './ui/Card.svelte'
   import Button from './ui/Button.svelte'
@@ -12,8 +12,8 @@
   let s = $derived($status)
   let busyProject = $state<string | null>(null)
   let editingProject = $state<string | null>(null)
-  let showRebuildAllConfirm = $state(false)
-  let busyRebuildAll = $state(false)
+  let showReindexAllConfirm = $state(false)
+  let busyReindexAll = $state(false)
 
   let p = $derived($progress)
   let isRunning = $derived(p?.status === 'running')
@@ -60,12 +60,12 @@
     }
   }
 
-  async function handleRebuild(name: string) {
+  async function handleReindex(name: string) {
     busyProject = name
     try {
-      await rebuildProject(name)
+      await reindexProject(name)
       await refreshStatus()
-      pushToast('success', `Rebuild started for "${name}"`)
+      pushToast('success', `Reindex started for "${name}"`)
     } catch (e) {
       pushToast('error', String(e))
     } finally {
@@ -73,17 +73,17 @@
     }
   }
 
-  async function handleRebuildAll() {
-    busyRebuildAll = true
+  async function handleReindexAll() {
+    busyReindexAll = true
     try {
-      await rebuildIndex()
+      await reindexAll()
       await refreshStatus()
-      pushToast('success', 'Index rebuild started')
-      showRebuildAllConfirm = false
+      pushToast('success', 'Reindex started')
+      showReindexAllConfirm = false
     } catch (e) {
       pushToast('error', String(e))
     } finally {
-      busyRebuildAll = false
+      busyReindexAll = false
     }
   }
 
@@ -122,11 +122,11 @@
       <Button
         variant="destructive"
         size="sm"
-        onclick={() => (showRebuildAllConfirm = true)}
+        onclick={() => (showReindexAllConfirm = true)}
         disabled={isRunning}
       >
         <RefreshCw class="w-3.5 h-3.5" />
-        Rebuild All
+        Reindex All
       </Button>
       <ProjectAdd />
     </div>
@@ -202,11 +202,11 @@
                   <Button
                     variant="destructive"
                     size="sm"
-                    onclick={() => handleRebuild(name)}
+                    onclick={() => handleReindex(name)}
                     disabled={busyProject === name}
                   >
                     <RefreshCw class="w-3 h-3" />
-                    Rebuild
+                    Reindex
                   </Button>
                   <Button
                     variant="ghost"
@@ -244,12 +244,12 @@
   />
 {/if}
 
-{#if showRebuildAllConfirm}
+{#if showReindexAllConfirm}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-    onclick={() => !busyRebuildAll && (showRebuildAllConfirm = false)}
-    onkeydown={(e) => e.key === 'Escape' && !busyRebuildAll && (showRebuildAllConfirm = false)}
+    onclick={() => !busyReindexAll && (showReindexAllConfirm = false)}
+    onkeydown={(e) => e.key === 'Escape' && !busyReindexAll && (showReindexAllConfirm = false)}
     role="presentation"
   >
     <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
@@ -262,11 +262,11 @@
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-2">
           <AlertTriangle class="w-5 h-5 text-destructive" />
-          <h2 class="text-sm font-semibold text-foreground">Rebuild All Projects</h2>
+          <h2 class="text-sm font-semibold text-foreground">Reindex All Projects</h2>
         </div>
         <button
-          onclick={() => !busyRebuildAll && (showRebuildAllConfirm = false)}
-          disabled={busyRebuildAll}
+          onclick={() => !busyReindexAll && (showReindexAllConfirm = false)}
+          disabled={busyReindexAll}
           class="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           aria-label="Close"
         >
@@ -275,26 +275,26 @@
       </div>
 
       <p class="text-sm text-muted-foreground mb-4">
-        This will rebuild the index for <strong class="text-foreground">all projects</strong>. This action cannot be undone and may take a while depending on the size of your projects.
+        This will reindex <strong class="text-foreground">all projects</strong>. This action cannot be undone and may take a while depending on the size of your projects.
       </p>
 
       <div class="flex gap-2">
         <Button
           variant="outline"
-          onclick={() => (showRebuildAllConfirm = false)}
-          disabled={busyRebuildAll}
+          onclick={() => (showReindexAllConfirm = false)}
+          disabled={busyReindexAll}
           class="flex-1"
         >
           Cancel
         </Button>
         <Button
           variant="destructive"
-          onclick={handleRebuildAll}
-          disabled={busyRebuildAll}
+          onclick={handleReindexAll}
+          disabled={busyReindexAll}
           class="flex-1"
         >
           <RefreshCw class="w-3.5 h-3.5" />
-          {busyRebuildAll ? 'Starting...' : 'Rebuild All'}
+          {busyReindexAll ? 'Starting...' : 'Reindex All'}
         </Button>
       </div>
     </div>
