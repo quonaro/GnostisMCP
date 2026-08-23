@@ -2,19 +2,25 @@ package sysmetrics
 
 import (
 	"encoding/json"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 )
 
+// rocmSmiPaths lists candidate locations for rocm-smi.
+var rocmSmiPaths = []string{
+	"rocm-smi",
+	"/opt/rocm/bin/rocm-smi",
+	"/usr/bin/rocm-smi",
+	"/usr/local/bin/rocm-smi",
+}
+
 // collectAMDGPUs queries rocm-smi for AMD GPU utilization.
 // Returns nil if rocm-smi is not available or no GPUs are found.
 func collectAMDGPUs() []GPUMetrics {
-	cmd := exec.Command("rocm-smi",
+	output, err := execFirstAvailable(rocmSmiPaths,
 		"--showuse", "--showmeminfo", "vram", "--showtemp", "--showproductname", "--json",
 	)
-	output, err := cmd.Output()
 	if err != nil {
 		return nil
 	}

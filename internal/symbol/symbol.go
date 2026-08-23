@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 // Location describes a single symbol definition.
@@ -34,16 +36,18 @@ type Chunk struct {
 // Index maps symbol names to their definition locations.
 // It is safe for concurrent use.
 type Index struct {
-	mu    sync.RWMutex
-	data  map[string][]Location
-	sqlDB *sql.DB
+	mu     sync.RWMutex
+	data   map[string][]Location
+	reader *sql.DB
+	writer *sql.DB
 }
 
 // New opens or creates a symbol index backed by SQLite.
-func New(sqlDB *sql.DB) (*Index, error) {
+func New(database *db.DB) (*Index, error) {
 	idx := &Index{
-		data:  make(map[string][]Location),
-		sqlDB: sqlDB,
+		data:   make(map[string][]Location),
+		reader: database.Reader(),
+		writer: database.Writer(),
 	}
 	if err := idx.load(); err != nil {
 		return nil, fmt.Errorf("load symbol index: %w", err)
@@ -90,8 +94,8 @@ func (idx *Index) RemoveByPath(path string) {
 			idx.data[key] = kept
 		}
 	}
-	if idx.sqlDB != nil {
-		if _, err := idx.sqlDB.Exec(`DELETE FROM symbols WHERE path=?`, path); err != nil {
+	if idx.writer != nil {
+		if _, err := idx.writer.Exec(`DELETE FROM symbols WHERE path=?`, path); err != nil {
 			fmt.Printf("WARN: delete symbols by path: %v\n", err)
 		}
 	}
@@ -134,7 +138,7 @@ func (idx *Index) Save() error {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	tx, err := idx.sqlDB.Begin()
+	tx, err := idx.writer.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
@@ -160,7 +164,7 @@ func (idx *Index) Save() error {
 }
 
 func (idx *Index) load() error {
-	rows, err := idx.sqlDB.Query(`SELECT symbol, path, language, kind, start_line, end_line FROM symbols`)
+	rows, err := idx.reader.Query(`SELECT symbol, path, language, kind, start_line, end_line FROM symbols`)
 	if err != nil {
 		return fmt.Errorf("query symbols: %w", err)
 	}

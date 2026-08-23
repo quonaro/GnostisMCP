@@ -7,10 +7,21 @@ import (
 	"strings"
 )
 
+// nvidiaSmiPaths lists candidate locations for nvidia-smi.
+var nvidiaSmiPaths = []string{
+	"nvidia-smi",
+	"/usr/bin/nvidia-smi",
+	"/usr/local/bin/nvidia-smi",
+}
+
 // collectNvidiaGPUs queries nvidia-smi for NVIDIA GPU utilization.
 // Returns nil if nvidia-smi is not available or no GPUs are found.
 func collectNvidiaGPUs() []GPUMetrics {
-	cmd := exec.Command("nvidia-smi",
+	path, err := firstAvailable(nvidiaSmiPaths)
+	if err != nil {
+		return nil
+	}
+	cmd := exec.Command(path,
 		"--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu",
 		"--format=csv,noheader,nounits",
 	)

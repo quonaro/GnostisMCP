@@ -9,7 +9,8 @@ import (
 
 // OpenTestDB opens an in-memory SQLite database with all migrations applied.
 // It is intended for use in unit tests only.
-func OpenTestDB(t *testing.T) *sql.DB {
+// Both reader and writer pools share the same in-memory connection.
+func OpenTestDB(t *testing.T) *DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -20,5 +21,5 @@ func OpenTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("migrate test db: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return db
+	return &DB{reader: db, writer: db}
 }

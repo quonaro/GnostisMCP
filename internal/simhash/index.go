@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 // Meta identifies one chunk in the simhash index.
@@ -40,12 +42,16 @@ type indexEntry struct {
 type Index struct {
 	mu      sync.RWMutex
 	entries []indexEntry
-	sqlDB   *sql.DB
+	reader  *sql.DB
+	writer  *sql.DB
 }
 
 // NewIndex opens or creates a simhash index backed by SQLite.
-func NewIndex(sqlDB *sql.DB) (*Index, error) {
-	idx := &Index{sqlDB: sqlDB}
+func NewIndex(database *db.DB) (*Index, error) {
+	idx := &Index{
+		reader: database.Reader(),
+		writer: database.Writer(),
+	}
 	if err := idx.load(); err != nil {
 		return nil, fmt.Errorf("load simhash index: %w", err)
 	}
@@ -70,8 +76,8 @@ func (idx *Index) RemoveByPath(path string) {
 		}
 	}
 	idx.entries = kept
-	if idx.sqlDB != nil {
-		if _, err := idx.sqlDB.Exec(`DELETE FROM simhash_entries WHERE path=?`, path); err != nil {
+	if idx.writer != nil {
+		if _, err := idx.writer.Exec(`DELETE FROM simhash_entries WHERE path=?`, path); err != nil {
 			fmt.Printf("WARN: delete simhash by path: %v\n", err)
 		}
 	}
@@ -116,7 +122,7 @@ func (idx *Index) Save() error {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	tx, err := idx.sqlDB.Begin()
+	tx, err := idx.writer.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
@@ -140,7 +146,7 @@ func (idx *Index) Save() error {
 }
 
 func (idx *Index) load() error {
-	rows, err := idx.sqlDB.Query(`SELECT fingerprint, project_id, path, symbol, start_line, end_line FROM simhash_entries`)
+	rows, err := idx.reader.Query(`SELECT fingerprint, project_id, path, symbol, start_line, end_line FROM simhash_entries`)
 	if err != nil {
 		return fmt.Errorf("query simhash entries: %w", err)
 	}

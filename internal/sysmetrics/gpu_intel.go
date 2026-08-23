@@ -2,18 +2,22 @@ package sysmetrics
 
 import (
 	"bufio"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 )
 
+// xpuSmiPaths lists candidate locations for xpu-smi.
+var xpuSmiPaths = []string{
+	"xpu-smi",
+	"/usr/bin/xpu-smi",
+	"/usr/local/bin/xpu-smi",
+}
+
 // collectIntelGPUs queries xpu-smi for Intel GPU utilization.
 // Returns nil if xpu-smi is not available or no GPUs are found.
 func collectIntelGPUs() []GPUMetrics {
-	// List devices to get count and names.
-	cmd := exec.Command("xpu-smi", "discovery", "-l")
-	output, err := cmd.Output()
+	output, err := execFirstAvailable(xpuSmiPaths, "discovery", "-l")
 	if err != nil {
 		return nil
 	}
@@ -54,8 +58,7 @@ func collectIntelGPUs() []GPUMetrics {
 
 // collectIntelGPUStats queries per-device stats from xpu-smi stats.
 func collectIntelGPUStats(idx int) (util float64, memUsed, memTotal uint64, temp float64) {
-	cmd := exec.Command("xpu-smi", "stats", "-d", strconv.Itoa(idx))
-	output, err := cmd.Output()
+	output, err := execFirstAvailable(xpuSmiPaths, "stats", "-d", strconv.Itoa(idx))
 	if err != nil {
 		return
 	}

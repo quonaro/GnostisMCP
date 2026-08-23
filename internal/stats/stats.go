@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 // Project holds per-project indexing metadata.
@@ -21,16 +23,18 @@ type Project struct {
 
 // Stats persists per-project indexing statistics.
 type Stats struct {
-	mu    sync.Mutex
-	sqlDB *sql.DB
-	data  map[string]Project
+	mu     sync.Mutex
+	reader *sql.DB
+	writer *sql.DB
+	data   map[string]Project
 }
 
 // New creates a Stats writer backed by SQLite.
-func New(sqlDB *sql.DB) *Stats {
+func New(database *db.DB) *Stats {
 	return &Stats{
-		sqlDB: sqlDB,
-		data:  make(map[string]Project),
+		reader: database.Reader(),
+		writer: database.Writer(),
+		data:   make(map[string]Project),
 	}
 }
 
@@ -39,7 +43,7 @@ func (s *Stats) Load() (map[string]Project, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.sqlDB.Query(`SELECT project, path, chunks, last_indexed_at, model FROM project_stats`)
+	rows, err := s.reader.Query(`SELECT project, path, chunks, last_indexed_at, model FROM project_stats`)
 	if err != nil {
 		return nil, fmt.Errorf("query project stats: %w", err)
 	}
@@ -68,7 +72,7 @@ func (s *Stats) Update(project string, chunks int, model string) error {
 		Model:         model,
 		LastIndexedAt: now,
 	}
-	_, err := s.sqlDB.Exec(`INSERT OR REPLACE INTO project_stats (project, path, chunks, last_indexed_at, model) VALUES (?, ?, ?, ?, ?)`,
+	_, err := s.writer.Exec(`INSERT OR REPLACE INTO project_stats (project, path, chunks, last_indexed_at, model) VALUES (?, ?, ?, ?, ?)`,
 		project, s.data[project].Path, chunks, now.Format(time.RFC3339Nano), model)
 	if err != nil {
 		return fmt.Errorf("upsert project stats: %w", err)

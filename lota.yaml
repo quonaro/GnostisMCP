@@ -36,14 +36,28 @@ frontend-dev:
   dir: web
 
 push:
-  desc: Push to GitHub
+  desc: Build, lint, commit, and push to GitHub
   color: cyan
   args:
   - "tag:str?"
   script: |
-    if [ -n $tag ]; then
-      git tag -f $tag
-      git push origin $tag --force
+    set -euo pipefail
+
+    echo "==> Building..."
+    lota build
+
+    echo "==> Running pre-commit checks..."
+    pre-commit run --all-files
+
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "==> Committing changes from build and lint..."
+      git add -A
+      git commit -m "chore: pre-push build and lint fixes"
+    fi
+
+    if [ -n "${tag:-}" ]; then
+      git tag -f "$tag"
+      git push origin "$tag" --force
       git push
     else
       git push origin main

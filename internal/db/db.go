@@ -6,47 +6,87 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	_ "modernc.org/sqlite"
 )
 
+// DB holds separate read and write connection pools for SQLite.
+// WAL mode allows concurrent readers while a write is in progress,
+// so reads are never blocked by indexing writes.
+type DB struct {
+	reader *sql.DB
+	writer *sql.DB
+}
+
+// Writer returns the single-connection write pool.
+func (d *DB) Writer() *sql.DB { return d.writer }
+
+// Reader returns the multi-connection read pool.
+func (d *DB) Reader() *sql.DB { return d.reader }
+
+// Close closes both connection pools.
+func (d *DB) Close() error {
+	var firstErr error
+	if err := d.reader.Close(); err != nil {
+		firstErr = err
+	}
+	if err := d.writer.Close(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
+}
+
 // Open opens or creates a SQLite database at the given path and runs migrations.
 // WAL mode is enabled for concurrent read access during writes.
-func Open(path string) (*sql.DB, error) {
+// It returns a DB with separate read and write connection pools.
+func Open(path string) (*DB, error) {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
 	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)"
-	db, err := sql.Open("sqlite", dsn)
+
+	// Writer pool: single connection to serialise writes and avoid SQLITE_BUSY.
+	writer, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
+		return nil, fmt.Errorf("open sqlite writer: %w", err)
 	}
+	writer.SetMaxOpenConns(1)
 
-	// Single writer connection to avoid SQLITE_BUSY errors.
-	db.SetMaxOpenConns(1)
-
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
-		_ = db.Close()
+	if _, err := writer.Exec(`PRAGMA journal_mode=WAL`); err != nil {
+		_ = writer.Close()
 		return nil, fmt.Errorf("set WAL mode: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA wal_autocheckpoint=1000`); err != nil {
-		_ = db.Close()
+	if _, err := writer.Exec(`PRAGMA wal_autocheckpoint=1000`); err != nil {
+		_ = writer.Close()
 		return nil, fmt.Errorf("set wal autocheckpoint: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA synchronous=NORMAL`); err != nil {
-		_ = db.Close()
+	if _, err := writer.Exec(`PRAGMA synchronous=NORMAL`); err != nil {
+		_ = writer.Close()
 		return nil, fmt.Errorf("set synchronous: %w", err)
 	}
 
-	if err := Migrate(db); err != nil {
-		_ = db.Close()
+	if err := Migrate(writer); err != nil {
+		_ = writer.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
-	slog.Info("sqlite database ready", "path", path)
-	return db, nil
+	// Reader pool: multiple connections for concurrent reads in WAL mode.
+	reader, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		_ = writer.Close()
+		return nil, fmt.Errorf("open sqlite reader: %w", err)
+	}
+	maxReaders := runtime.NumCPU()
+	if maxReaders < 4 {
+		maxReaders = 4
+	}
+	reader.SetMaxOpenConns(maxReaders)
+
+	slog.Info("sqlite database ready", "path", path, "readers", maxReaders)
+	return &DB{reader: reader, writer: writer}, nil
 }
 
 // Migrate creates all required tables if they do not exist.

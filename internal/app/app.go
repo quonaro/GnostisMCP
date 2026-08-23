@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
@@ -37,7 +36,7 @@ import (
 // App orchestrates configuration, indexing, search, and the MCP server.
 type App struct {
 	cfg            config.Config
-	sqlDB          *sql.DB
+	sqlDB          *db.DB
 	dirs           []directory.Directory
 	projects       []project.Project
 	store          store.VectorStore

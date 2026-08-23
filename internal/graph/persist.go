@@ -1,16 +1,17 @@
 package graph
 
 import (
-	"database/sql"
 	"fmt"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 // Save writes the graph to SQLite.
-func (g *Graph) Save(db *sql.DB) error {
+func (g *Graph) Save(database *db.DB) error {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
-	tx, err := db.Begin()
+	tx, err := database.Writer().Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
@@ -50,8 +51,8 @@ func (g *Graph) Save(db *sql.DB) error {
 }
 
 // Load reads the graph from SQLite.
-func (g *Graph) Load(db *sql.DB) error {
-	rows, err := db.Query(`SELECT id, path, symbol, kind, language, start_line, end_line FROM graph_nodes`)
+func (g *Graph) Load(database *db.DB) error {
+	rows, err := database.Reader().Query(`SELECT id, path, symbol, kind, language, start_line, end_line FROM graph_nodes`)
 	if err != nil {
 		return fmt.Errorf("query graph nodes: %w", err)
 	}
@@ -74,7 +75,7 @@ func (g *Graph) Load(db *sql.DB) error {
 		return fmt.Errorf("iterate nodes: %w", err)
 	}
 
-	edgeRows, err := db.Query(`SELECT from_id, "to", line FROM graph_edges`)
+	edgeRows, err := database.Reader().Query(`SELECT from_id, "to", line FROM graph_edges`)
 	if err != nil {
 		return fmt.Errorf("query graph edges: %w", err)
 	}

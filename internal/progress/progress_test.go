@@ -79,7 +79,7 @@ func TestProgressLoadPreservesJobID(t *testing.T) {
 	sqlDB := db.OpenTestDB(t)
 
 	// Simulate a previous run by inserting a row directly.
-	_, err := sqlDB.Exec(`INSERT INTO progress_state (id, job_id, status, project) VALUES (1, 'project:RuobrOld-123', 'running', 'RuobrOld')`)
+	_, err := sqlDB.Writer().Exec(`INSERT INTO progress_state (id, job_id, status, project) VALUES (1, 'project:RuobrOld-123', 'running', 'RuobrOld')`)
 	if err != nil {
 		t.Fatalf("insert progress row: %v", err)
 	}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 // ProjectsDirName is the subdirectory inside the config directory that holds
@@ -19,8 +21,8 @@ func ProjectsDir(configPath string) string {
 
 // LoadProjectFiles reads all projects from the SQLite database and returns
 // them as Directory entries. An empty database yields an empty slice.
-func LoadProjectFiles(db *sql.DB) ([]Directory, error) {
-	rows, err := db.Query(`SELECT name, path, extensions, include, exclude, max_file_mb FROM projects`)
+func LoadProjectFiles(database *db.DB) ([]Directory, error) {
+	rows, err := database.Reader().Query(`SELECT name, path, extensions, include, exclude, max_file_mb FROM projects`)
 	if err != nil {
 		return nil, fmt.Errorf("query projects: %w", err)
 	}
@@ -48,7 +50,7 @@ func LoadProjectFiles(db *sql.DB) ([]Directory, error) {
 }
 
 // SaveProjectFile writes a single project to the SQLite database.
-func SaveProjectFile(db *sql.DB, d Directory) error {
+func SaveProjectFile(database *db.DB, d Directory) error {
 	if d.Name == "" {
 		return fmt.Errorf("project name is required")
 	}
@@ -67,7 +69,7 @@ func SaveProjectFile(db *sql.DB, d Directory) error {
 		exclude = string(b)
 	}
 
-	_, err := db.Exec(`INSERT OR REPLACE INTO projects (name, path, extensions, include, exclude, max_file_mb) VALUES (?, ?, ?, ?, ?, ?)`,
+	_, err := database.Writer().Exec(`INSERT OR REPLACE INTO projects (name, path, extensions, include, exclude, max_file_mb) VALUES (?, ?, ?, ?, ?, ?)`,
 		d.Name, d.Path, extensions, include, exclude, d.MaxFileSizeMB)
 	if err != nil {
 		return fmt.Errorf("upsert project: %w", err)
@@ -77,8 +79,8 @@ func SaveProjectFile(db *sql.DB, d Directory) error {
 
 // DeleteProjectFile removes the project with the given name from the database.
 // A missing row is not an error.
-func DeleteProjectFile(db *sql.DB, name string) error {
-	_, err := db.Exec(`DELETE FROM projects WHERE name=?`, name)
+func DeleteProjectFile(database *db.DB, name string) error {
+	_, err := database.Writer().Exec(`DELETE FROM projects WHERE name=?`, name)
 	if err != nil {
 		return fmt.Errorf("delete project %s: %w", name, err)
 	}

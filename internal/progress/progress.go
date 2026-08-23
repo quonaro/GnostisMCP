@@ -6,6 +6,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 // Status values for a rebuild operation.
@@ -62,15 +64,19 @@ func (s State) ETA() time.Duration {
 
 // Progress persists rebuild progress to SQLite.
 type Progress struct {
-	mu    sync.Mutex
-	sqlDB *sql.DB
-	jobID string
-	state State
+	mu     sync.Mutex
+	reader *sql.DB
+	writer *sql.DB
+	jobID  string
+	state  State
 }
 
 // New creates a Progress writer backed by SQLite.
-func New(sqlDB *sql.DB) *Progress {
-	return &Progress{sqlDB: sqlDB}
+func New(database *db.DB) *Progress {
+	return &Progress{
+		reader: database.Reader(),
+		writer: database.Writer(),
+	}
 }
 
 // Load reads the persisted state from SQLite. If no row exists, it
@@ -82,7 +88,7 @@ func (p *Progress) Load() (State, error) {
 	var s State
 	var jobID, startedAt, updatedAt, phase, project, errMsg sql.NullString
 	var totalFiles, doneFiles, totalChunks, doneChunks, pid sql.NullInt64
-	err := p.sqlDB.QueryRow(`SELECT job_id, status, phase, project, total_files, done_files, total_chunks, done_chunks, pid, started_at, updated_at, error FROM progress_state WHERE id=1`).Scan(
+	err := p.reader.QueryRow(`SELECT job_id, status, phase, project, total_files, done_files, total_chunks, done_chunks, pid, started_at, updated_at, error FROM progress_state WHERE id=1`).Scan(
 		&jobID, &s.Status, &phase, &project, &totalFiles, &doneFiles, &totalChunks, &doneChunks, &pid, &startedAt, &updatedAt, &errMsg)
 	if err == sql.ErrNoRows {
 		p.state = State{Status: StatusIdle}
@@ -215,12 +221,12 @@ func (p *Progress) State() State {
 }
 
 func (p *Progress) saveLocked() error {
-	if p.sqlDB == nil {
+	if p.writer == nil {
 		return nil
 	}
 
 	s := p.state
-	_, err := p.sqlDB.Exec(`INSERT OR REPLACE INTO progress_state (id, job_id, status, phase, project, total_files, done_files, total_chunks, done_chunks, pid, started_at, updated_at, error) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := p.writer.Exec(`INSERT OR REPLACE INTO progress_state (id, job_id, status, phase, project, total_files, done_files, total_chunks, done_chunks, pid, started_at, updated_at, error) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.JobID, s.Status, s.Phase, s.Project, s.TotalFiles, s.DoneFiles, s.TotalChunks, s.DoneChunks, s.PID, s.StartedAt.Format(time.RFC3339), s.UpdatedAt.Format(time.RFC3339), s.Error)
 	if err != nil {
 		return fmt.Errorf("upsert progress: %w", err)

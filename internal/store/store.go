@@ -12,6 +12,7 @@ import (
 	chromem "github.com/philippgille/chromem-go"
 
 	"github.com/quonaro/gnostis/internal/chunker"
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 const collectionName = "code_chunks"
@@ -37,7 +38,8 @@ type VectorStore interface {
 type Store struct {
 	mu     sync.RWMutex
 	col    *chromem.Collection
-	sqlDB  *sql.DB
+	reader *sql.DB
+	writer *sql.DB
 	scope  string
 	hashes map[string]string
 	dim    int
@@ -46,9 +48,9 @@ type Store struct {
 // compile-time check that Store implements VectorStore.
 var _ VectorStore = (*Store)(nil)
 
-// New opens or creates a persistent chromem-go database.
-// sqlDB is used for file hashes and embedding dimension metadata.
-func New(ctx context.Context, dataDir string, sqlDB *sql.DB) (*Store, error) {
+// New opens or creates a persistent chromem-go database and returns a VectorStore.
+// database is used for file hashes and embedding dimension metadata.
+func New(ctx context.Context, dataDir string, database *db.DB) (*Store, error) {
 	slog.InfoContext(ctx, "opening store", "data_dir", dataDir)
 	db, err := chromem.NewPersistentDB(dataDir, false)
 	if err != nil {
@@ -66,7 +68,8 @@ func New(ctx context.Context, dataDir string, sqlDB *sql.DB) (*Store, error) {
 
 	s := &Store{
 		col:    col,
-		sqlDB:  sqlDB,
+		reader: database.Reader(),
+		writer: database.Writer(),
 		scope:  scopeCode,
 		hashes: make(map[string]string),
 	}
@@ -168,7 +171,7 @@ func (s *Store) DeleteByPaths(ctx context.Context, paths []string) error {
 			return fmt.Errorf("delete path %s: %w", path, err)
 		}
 		delete(s.hashes, path)
-		if _, err := s.sqlDB.Exec(`DELETE FROM file_hashes WHERE scope=? AND path=?`, s.scope, path); err != nil {
+		if _, err := s.writer.Exec(`DELETE FROM file_hashes WHERE scope=? AND path=?`, s.scope, path); err != nil {
 			return fmt.Errorf("delete hash for path %s: %w", path, err)
 		}
 	}
@@ -286,7 +289,7 @@ func (s *Store) Paths() []string {
 }
 
 func (s *Store) loadHashes() error {
-	rows, err := s.sqlDB.Query(`SELECT path, hash FROM file_hashes WHERE scope=?`, s.scope)
+	rows, err := s.reader.Query(`SELECT path, hash FROM file_hashes WHERE scope=?`, s.scope)
 	if err != nil {
 		return fmt.Errorf("query file hashes: %w", err)
 	}
@@ -303,7 +306,7 @@ func (s *Store) loadHashes() error {
 
 // saveHashes upserts hashes for the given chunks into SQLite.
 func (s *Store) saveHashes(chunks []chunker.Chunk) error {
-	tx, err := s.sqlDB.Begin()
+	tx, err := s.writer.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
@@ -327,7 +330,7 @@ func (s *Store) saveHashes(chunks []chunker.Chunk) error {
 
 func (s *Store) loadDim() error {
 	var dim int
-	err := s.sqlDB.QueryRow(`SELECT dim FROM embedding_dim WHERE scope=?`, s.scope).Scan(&dim)
+	err := s.reader.QueryRow(`SELECT dim FROM embedding_dim WHERE scope=?`, s.scope).Scan(&dim)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -339,7 +342,7 @@ func (s *Store) loadDim() error {
 }
 
 func (s *Store) saveDim() error {
-	_, err := s.sqlDB.Exec(`INSERT OR REPLACE INTO embedding_dim (scope, dim) VALUES (?, ?)`, s.scope, s.dim)
+	_, err := s.writer.Exec(`INSERT OR REPLACE INTO embedding_dim (scope, dim) VALUES (?, ?)`, s.scope, s.dim)
 	if err != nil {
 		return fmt.Errorf("upsert embedding dim: %w", err)
 	}

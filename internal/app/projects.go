@@ -2,20 +2,20 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/quonaro/gnostis/internal/config"
+	"github.com/quonaro/gnostis/internal/db"
 	"github.com/quonaro/gnostis/internal/directory"
 	"github.com/quonaro/gnostis/internal/project"
 )
 
 // resolveProjects loads project configs from SQLite and creates
 // directory/project pairs.
-func resolveProjects(cfg config.Config, sqlDB *sql.DB) ([]directory.Directory, []project.Project, error) {
-	dirs, err := config.LoadProjectFiles(sqlDB)
+func resolveProjects(cfg config.Config, database *db.DB) ([]directory.Directory, []project.Project, error) {
+	dirs, err := config.LoadProjectFiles(database)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load project files: %w", err)
 	}
