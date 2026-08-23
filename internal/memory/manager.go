@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
@@ -34,7 +35,7 @@ type Manager struct {
 }
 
 // NewManager creates a memory manager from configuration.
-func NewManager(cfg config.Memory, dataDir string, provider embeddings.Provider) (*Manager, error) {
+func NewManager(cfg config.Memory, dataDir string, provider embeddings.Provider, sqlDB *sql.DB) (*Manager, error) {
 	registry := all.NewRegistry()
 	var providers []*Provider
 	for _, p := range registry.Providers() {
@@ -46,7 +47,7 @@ func NewManager(cfg config.Memory, dataDir string, provider embeddings.Provider)
 		providers = append(providers, NewProvider(p, pc))
 	}
 
-	store, err := NewStore(context.Background(), dataDir)
+	store, err := NewStore(context.Background(), dataDir, sqlDB)
 	if err != nil {
 		return nil, fmt.Errorf("open memory store: %w", err)
 	}

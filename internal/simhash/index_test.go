@@ -1,13 +1,13 @@
 package simhash
 
 import (
-	"path/filepath"
 	"testing"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 func TestIndex_AddAndFindSimilar(t *testing.T) {
-	dir := t.TempDir()
-	idx, err := NewIndex(filepath.Join(dir, "simhash.json"))
+	idx, err := NewIndex(db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewIndex: %v", err)
 	}
@@ -30,8 +30,7 @@ func TestIndex_AddAndFindSimilar(t *testing.T) {
 }
 
 func TestIndex_ExcludePath(t *testing.T) {
-	dir := t.TempDir()
-	idx, err := NewIndex(filepath.Join(dir, "simhash.json"))
+	idx, err := NewIndex(db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewIndex: %v", err)
 	}
@@ -46,8 +45,7 @@ func TestIndex_ExcludePath(t *testing.T) {
 }
 
 func TestIndex_RemoveByPath(t *testing.T) {
-	dir := t.TempDir()
-	idx, err := NewIndex(filepath.Join(dir, "simhash.json"))
+	idx, err := NewIndex(db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewIndex: %v", err)
 	}
@@ -68,10 +66,9 @@ func TestIndex_RemoveByPath(t *testing.T) {
 }
 
 func TestIndex_SaveLoad(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "simhash.json")
+	sqlDB := db.OpenTestDB(t)
 
-	idx, err := NewIndex(path)
+	idx, err := NewIndex(sqlDB)
 	if err != nil {
 		t.Fatalf("NewIndex: %v", err)
 	}
@@ -83,7 +80,7 @@ func TestIndex_SaveLoad(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	idx2, err := NewIndex(path)
+	idx2, err := NewIndex(sqlDB)
 	if err != nil {
 		t.Fatalf("NewIndex reload: %v", err)
 	}
@@ -98,9 +95,9 @@ func TestIndex_SaveLoad(t *testing.T) {
 }
 
 func TestIndex_LoadMissingFile(t *testing.T) {
-	idx, err := NewIndex("/nonexistent/path/simhash.json")
+	idx, err := NewIndex(db.OpenTestDB(t))
 	if err != nil {
-		t.Fatalf("NewIndex with missing file should not error: %v", err)
+		t.Fatalf("NewIndex with empty db should not error: %v", err)
 	}
 	matches := idx.FindSimilar(0, 0.85, "", 5)
 	if len(matches) != 0 {
@@ -109,8 +106,7 @@ func TestIndex_LoadMissingFile(t *testing.T) {
 }
 
 func TestIndex_ThresholdFiltering(t *testing.T) {
-	dir := t.TempDir()
-	idx, err := NewIndex(filepath.Join(dir, "simhash.json"))
+	idx, err := NewIndex(db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewIndex: %v", err)
 	}

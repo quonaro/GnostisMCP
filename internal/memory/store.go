@@ -2,11 +2,10 @@ package memory
 
 import (
 	"context"
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -17,23 +16,23 @@ import (
 
 const (
 	collectionName = "memory_chunks"
-	hashFileName   = "file_hashes.json"
-	dimFileName    = "embedding_dim.json"
+	scopeMemory    = "memory"
 )
 
 // Store persists memory chunks in a dedicated chromem-go collection separate
 // from the project code index.
 type Store struct {
-	mu       sync.RWMutex
-	col      *chromem.Collection
-	hashFile string
-	dimFile  string
-	hashes   map[string]string
-	dim      int
+	mu     sync.RWMutex
+	col    *chromem.Collection
+	sqlDB  *sql.DB
+	scope  string
+	hashes map[string]string
+	dim    int
 }
 
 // NewStore opens or creates a persistent chromem-go database for memory.
-func NewStore(ctx context.Context, dataDir string) (*Store, error) {
+// sqlDB is used for file hashes and embedding dimension metadata.
+func NewStore(ctx context.Context, dataDir string, sqlDB *sql.DB) (*Store, error) {
 	slog.InfoContext(ctx, "opening memory store", "data_dir", dataDir)
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create memory data dir: %w", err)
@@ -54,10 +53,10 @@ func NewStore(ctx context.Context, dataDir string) (*Store, error) {
 	}
 
 	s := &Store{
-		col:      col,
-		hashFile: filepath.Join(dataDir, hashFileName),
-		dimFile:  filepath.Join(dataDir, dimFileName),
-		hashes:   make(map[string]string),
+		col:    col,
+		sqlDB:  sqlDB,
+		scope:  scopeMemory,
+		hashes: make(map[string]string),
 	}
 	if err := s.loadHashes(); err != nil {
 		return nil, fmt.Errorf("load memory file hashes: %w", err)
@@ -112,7 +111,7 @@ func (s *Store) AddChunks(ctx context.Context, chunks []chunker.Chunk, embedding
 			return fmt.Errorf("save memory embedding dimension: %w", err)
 		}
 	}
-	if err := s.saveHashes(); err != nil {
+	if err := s.saveHashes(chunks); err != nil {
 		return fmt.Errorf("save memory file hashes: %w", err)
 	}
 
@@ -156,16 +155,23 @@ func (s *Store) DeleteByPaths(ctx context.Context, paths []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	tx, err := s.sqlDB.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
 	for _, path := range paths {
 		if err := s.col.Delete(ctx, map[string]string{"path": path}, nil); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("delete memory path %s: %w", path, err)
 		}
 		delete(s.hashes, path)
+		if _, err := tx.Exec(`DELETE FROM file_hashes WHERE scope = ? AND path = ?`, s.scope, path); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("delete memory hash for path %s: %w", path, err)
+		}
 	}
-	if err := s.saveHashes(); err != nil {
-		return fmt.Errorf("save memory file hashes: %w", err)
-	}
-	return nil
+	return tx.Commit()
 }
 
 // GetFileHash returns the stored hash for a memory file path.
@@ -246,53 +252,62 @@ func chunkMetadata(ch chunker.Chunk) map[string]string {
 }
 
 func (s *Store) loadHashes() error {
-	data, err := os.ReadFile(s.hashFile)
+	rows, err := s.sqlDB.Query(`SELECT path, hash FROM file_hashes WHERE scope=?`, s.scope)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+		return fmt.Errorf("query memory file hashes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var path, hash string
+		if err := rows.Scan(&path, &hash); err != nil {
+			return fmt.Errorf("scan memory hash row: %w", err)
 		}
-		return fmt.Errorf("read memory hash file: %w", err)
+		s.hashes[path] = hash
 	}
-	if err := json.Unmarshal(data, &s.hashes); err != nil {
-		return fmt.Errorf("parse memory hash file: %w", err)
-	}
-	return nil
+	return rows.Err()
 }
 
-func (s *Store) saveHashes() error {
-	data, err := json.Marshal(s.hashes)
+// saveHashes upserts hashes for the given chunks into SQLite.
+func (s *Store) saveHashes(chunks []chunker.Chunk) error {
+	tx, err := s.sqlDB.Begin()
 	if err != nil {
-		return fmt.Errorf("marshal memory hashes: %w", err)
+		return fmt.Errorf("begin tx: %w", err)
 	}
-	if err := os.WriteFile(s.hashFile, data, 0o600); err != nil {
-		return fmt.Errorf("write memory hash file: %w", err)
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO file_hashes (scope, path, hash) VALUES (?, ?, ?)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("prepare stmt: %w", err)
 	}
-	return nil
+	defer func() { _ = stmt.Close() }()
+	for _, ch := range chunks {
+		if ch.FileHash == "" {
+			continue
+		}
+		if _, err := stmt.Exec(s.scope, ch.Path, ch.FileHash); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("exec upsert memory hash for %s: %w", ch.Path, err)
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) loadDim() error {
-	data, err := os.ReadFile(s.dimFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read memory dimension file: %w", err)
-	}
 	var dim int
-	if err := json.Unmarshal(data, &dim); err != nil {
-		return fmt.Errorf("parse memory dimension file: %w", err)
+	err := s.sqlDB.QueryRow(`SELECT dim FROM embedding_dim WHERE scope=?`, s.scope).Scan(&dim)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("query memory embedding dim: %w", err)
 	}
 	s.dim = dim
 	return nil
 }
 
 func (s *Store) saveDim() error {
-	data, err := json.Marshal(s.dim)
+	_, err := s.sqlDB.Exec(`INSERT OR REPLACE INTO embedding_dim (scope, dim) VALUES (?, ?)`, s.scope, s.dim)
 	if err != nil {
-		return fmt.Errorf("marshal memory dimension: %w", err)
-	}
-	if err := os.WriteFile(s.dimFile, data, 0o600); err != nil {
-		return fmt.Errorf("write memory dimension file: %w", err)
+		return fmt.Errorf("upsert memory embedding dim: %w", err)
 	}
 	return nil
 }

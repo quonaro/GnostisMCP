@@ -1,10 +1,9 @@
 package progress
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -61,38 +60,48 @@ func (s State) ETA() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-// Progress persists rebuild progress to a JSON file.
+// Progress persists rebuild progress to SQLite.
 type Progress struct {
 	mu    sync.Mutex
-	path  string
+	sqlDB *sql.DB
 	jobID string
 	state State
 }
 
-// New creates a Progress writer for the given file path.
-func New(path string) *Progress {
-	return &Progress{path: path}
+// New creates a Progress writer backed by SQLite.
+func New(sqlDB *sql.DB) *Progress {
+	return &Progress{sqlDB: sqlDB}
 }
 
-// Load reads the persisted state from disk. If the file does not exist, it
+// Load reads the persisted state from SQLite. If no row exists, it
 // returns an idle state.
 func (p *Progress) Load() (State, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	data, err := os.ReadFile(p.path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			p.state = State{Status: StatusIdle}
-			return p.state, nil
-		}
-		return State{}, fmt.Errorf("read progress file: %w", err)
-	}
-
 	var s State
-	if err := json.Unmarshal(data, &s); err != nil {
-		return State{}, fmt.Errorf("decode progress file: %w", err)
+	var jobID, startedAt, updatedAt, phase, project, errMsg sql.NullString
+	var totalFiles, doneFiles, totalChunks, doneChunks, pid sql.NullInt64
+	err := p.sqlDB.QueryRow(`SELECT job_id, status, phase, project, total_files, done_files, total_chunks, done_chunks, pid, started_at, updated_at, error FROM progress_state WHERE id=1`).Scan(
+		&jobID, &s.Status, &phase, &project, &totalFiles, &doneFiles, &totalChunks, &doneChunks, &pid, &startedAt, &updatedAt, &errMsg)
+	if err == sql.ErrNoRows {
+		p.state = State{Status: StatusIdle}
+		return p.state, nil
 	}
+	if err != nil {
+		return State{}, fmt.Errorf("query progress: %w", err)
+	}
+	s.JobID = jobID.String
+	s.Phase = phase.String
+	s.Project = project.String
+	s.Error = errMsg.String
+	s.TotalFiles = int(totalFiles.Int64)
+	s.DoneFiles = int(doneFiles.Int64)
+	s.TotalChunks = int(totalChunks.Int64)
+	s.DoneChunks = int(doneChunks.Int64)
+	s.PID = int(pid.Int64)
+	s.StartedAt, _ = time.Parse(time.RFC3339, startedAt.String)
+	s.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt.String)
 	if s.JobID != "" {
 		p.jobID = s.JobID
 	}
@@ -206,28 +215,15 @@ func (p *Progress) State() State {
 }
 
 func (p *Progress) saveLocked() error {
-	if p.path == "" {
+	if p.sqlDB == nil {
 		return nil
 	}
 
-	data, err := json.MarshalIndent(p.state, "", "  ")
+	s := p.state
+	_, err := p.sqlDB.Exec(`INSERT OR REPLACE INTO progress_state (id, job_id, status, phase, project, total_files, done_files, total_chunks, done_chunks, pid, started_at, updated_at, error) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.JobID, s.Status, s.Phase, s.Project, s.TotalFiles, s.DoneFiles, s.TotalChunks, s.DoneChunks, s.PID, s.StartedAt.Format(time.RFC3339), s.UpdatedAt.Format(time.RFC3339), s.Error)
 	if err != nil {
-		return fmt.Errorf("marshal progress: %w", err)
+		return fmt.Errorf("upsert progress: %w", err)
 	}
-
-	dir := filepath.Dir(p.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create progress dir: %w", err)
-	}
-
-	tmp := p.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write progress temp file: %w", err)
-	}
-
-	if err := os.Rename(tmp, p.path); err != nil {
-		return fmt.Errorf("rename progress file: %w", err)
-	}
-
 	return nil
 }

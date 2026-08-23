@@ -1,10 +1,8 @@
 package symbol
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -15,6 +13,7 @@ type Location struct {
 	Path      string `json:"path"`
 	Language  string `json:"language"`
 	Symbol    string `json:"symbol"`
+	Kind      string `json:"kind"`
 	Signature string `json:"signature"`
 	StartLine int    `json:"start_line"`
 	EndLine   int    `json:"end_line"`
@@ -26,6 +25,7 @@ type Chunk struct {
 	Path      string
 	Language  string
 	Symbol    string
+	Kind      string
 	Signature string
 	StartLine int
 	EndLine   int
@@ -34,16 +34,16 @@ type Chunk struct {
 // Index maps symbol names to their definition locations.
 // It is safe for concurrent use.
 type Index struct {
-	mu   sync.RWMutex
-	data map[string][]Location
-	path string
+	mu    sync.RWMutex
+	data  map[string][]Location
+	sqlDB *sql.DB
 }
 
-// New opens or creates a symbol index persisted at path.
-func New(path string) (*Index, error) {
+// New opens or creates a symbol index backed by SQLite.
+func New(sqlDB *sql.DB) (*Index, error) {
 	idx := &Index{
-		data: make(map[string][]Location),
-		path: path,
+		data:  make(map[string][]Location),
+		sqlDB: sqlDB,
 	}
 	if err := idx.load(); err != nil {
 		return nil, fmt.Errorf("load symbol index: %w", err)
@@ -90,6 +90,11 @@ func (idx *Index) RemoveByPath(path string) {
 			idx.data[key] = kept
 		}
 	}
+	if idx.sqlDB != nil {
+		if _, err := idx.sqlDB.Exec(`DELETE FROM symbols WHERE path=?`, path); err != nil {
+			fmt.Printf("WARN: delete symbols by path: %v\n", err)
+		}
+	}
 }
 
 // Lookup returns exact matches for a symbol name (case-insensitive).
@@ -124,35 +129,56 @@ func (idx *Index) SearchFuzzy(query string) []Location {
 	return out
 }
 
-// Save persists the index to disk.
+// Save persists the full index to SQLite. It replaces all rows in a single transaction.
 func (idx *Index) Save() error {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	if err := os.MkdirAll(filepath.Dir(idx.path), 0o750); err != nil {
-		return fmt.Errorf("create directory: %w", err)
-	}
-	data, err := json.Marshal(idx.data)
+
+	tx, err := idx.sqlDB.Begin()
 	if err != nil {
-		return fmt.Errorf("marshal index: %w", err)
+		return fmt.Errorf("begin tx: %w", err)
 	}
-	tmp := idx.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o640); err != nil {
-		return fmt.Errorf("write temp file: %w", err)
+	if _, err := tx.Exec(`DELETE FROM symbols`); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete symbols: %w", err)
 	}
-	return os.Rename(tmp, idx.path)
+	stmt, err := tx.Prepare(`INSERT INTO symbols (symbol, path, language, kind, start_line, end_line) VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("prepare insert: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+	for key, locs := range idx.data {
+		for _, loc := range locs {
+			if _, err := stmt.Exec(key, loc.Path, loc.Language, loc.Kind, loc.StartLine, loc.EndLine); err != nil {
+				_ = tx.Rollback()
+				return fmt.Errorf("insert symbol %s: %w", loc.Symbol, err)
+			}
+		}
+	}
+	return tx.Commit()
 }
 
 func (idx *Index) load() error {
-	info, err := os.Stat(idx.path)
-	if os.IsNotExist(err) || (info != nil && info.Size() == 0) {
-		return nil
-	}
+	rows, err := idx.sqlDB.Query(`SELECT symbol, path, language, kind, start_line, end_line FROM symbols`)
 	if err != nil {
-		return fmt.Errorf("stat index: %w", err)
+		return fmt.Errorf("query symbols: %w", err)
 	}
-	data, err := os.ReadFile(idx.path)
-	if err != nil {
-		return fmt.Errorf("read index: %w", err)
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var key, path, language, kind string
+		var startLine, endLine int
+		if err := rows.Scan(&key, &path, &language, &kind, &startLine, &endLine); err != nil {
+			return fmt.Errorf("scan symbol row: %w", err)
+		}
+		idx.data[key] = append(idx.data[key], Location{
+			Symbol:    key,
+			Path:      path,
+			Language:  language,
+			Kind:      kind,
+			StartLine: startLine,
+			EndLine:   endLine,
+		})
 	}
-	return json.Unmarshal(data, &idx.data)
+	return rows.Err()
 }

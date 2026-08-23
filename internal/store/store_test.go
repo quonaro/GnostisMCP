@@ -2,18 +2,17 @@ package store
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/quonaro/gnostis/internal/chunker"
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 func TestStore_GetFileHash(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := New(ctx, dir)
+	s, err := New(ctx, dir, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -59,7 +58,8 @@ func TestStore_HashPersistence(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := New(ctx, dir)
+	sqlDB := db.OpenTestDB(t)
+	s, err := New(ctx, dir, sqlDB)
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestStore_HashPersistence(t *testing.T) {
 		t.Fatalf("add chunks: %v", err)
 	}
 
-	s2, err := New(ctx, dir)
+	s2, err := New(ctx, dir, sqlDB)
 	if err != nil {
 		t.Fatalf("reopen store: %v", err)
 	}
@@ -83,17 +83,13 @@ func TestStore_HashPersistence(t *testing.T) {
 	if hash != "xyz" {
 		t.Fatalf("expected hash %q after reopen, got %q", "xyz", hash)
 	}
-
-	if _, err := os.Stat(filepath.Join(dir, hashFileName)); err != nil {
-		t.Fatalf("hash file should exist: %v", err)
-	}
 }
 
 func TestStore_AddChunks_DimensionMismatch(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := New(ctx, dir)
+	s, err := New(ctx, dir, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -111,7 +107,7 @@ func TestStore_AddChunks_DimensionMismatchAgainstExisting(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := New(ctx, dir)
+	s, err := New(ctx, dir, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -133,7 +129,7 @@ func TestStore_Query_DimensionMismatch(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := New(ctx, dir)
+	s, err := New(ctx, dir, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -154,7 +150,7 @@ func TestStore_CountByProject(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := New(ctx, dir)
+	s, err := New(ctx, dir, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -197,7 +193,8 @@ func TestStore_DimPersistence(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := New(ctx, dir)
+	sqlDB := db.OpenTestDB(t)
+	s, err := New(ctx, dir, sqlDB)
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -208,7 +205,7 @@ func TestStore_DimPersistence(t *testing.T) {
 		t.Fatalf("add chunks: %v", err)
 	}
 
-	s2, err := New(ctx, dir)
+	s2, err := New(ctx, dir, sqlDB)
 	if err != nil {
 		t.Fatalf("reopen store: %v", err)
 	}

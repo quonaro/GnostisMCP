@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/quonaro/gnostis/internal/config"
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 type mockEmbedder struct{}
@@ -29,7 +30,7 @@ func TestManagerWriteNote(t *testing.T) {
 	cfg := config.Memory{
 		Cascade: config.ProviderConfig{Enabled: true},
 	}
-	mgr, err := NewManager(cfg, dir, &mockEmbedder{})
+	mgr, err := NewManager(cfg, dir, &mockEmbedder{}, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -59,7 +60,7 @@ func TestManagerProviderConfig(t *testing.T) {
 			MinUserMessageLength: 42,
 		},
 	}
-	mgr, err := NewManager(cfg, t.TempDir(), &mockEmbedder{})
+	mgr, err := NewManager(cfg, t.TempDir(), &mockEmbedder{}, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}

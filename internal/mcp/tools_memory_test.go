@@ -10,6 +10,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/quonaro/gnostis/internal/config"
+	"github.com/quonaro/gnostis/internal/db"
 	"github.com/quonaro/gnostis/internal/memory"
 )
 
@@ -30,7 +31,7 @@ func newMemoryServer(t *testing.T) (*Server, *memory.Manager, string) {
 	t.Helper()
 	dir := t.TempDir()
 	cfg := config.Memory{Cascade: config.ProviderConfig{Enabled: true}}
-	mgr, err := memory.NewManager(cfg, dir, &mockMemoryEmbedder{})
+	mgr, err := memory.NewManager(cfg, dir, &mockMemoryEmbedder{}, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}

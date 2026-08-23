@@ -1,8 +1,9 @@
 package symbol
 
 import (
-	"path/filepath"
 	"testing"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 func TestIndex_Lookup(t *testing.T) {
@@ -55,8 +56,8 @@ func TestIndex_SearchFuzzy(t *testing.T) {
 }
 
 func TestIndex_Persistence(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "symbols.json")
-	idx, err := New(path)
+	sqlDB := db.OpenTestDB(t)
+	idx, err := New(sqlDB)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestIndex_Persistence(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	idx2, err := New(path)
+	idx2, err := New(sqlDB)
 	if err != nil {
 		t.Fatalf("New reopen: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestIndex_Count(t *testing.T) {
 
 func newTestIndex(t *testing.T) *Index {
 	t.Helper()
-	idx, err := New(filepath.Join(t.TempDir(), "symbols.json"))
+	idx, err := New(db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("new index: %v", err)
 	}

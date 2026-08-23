@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/quonaro/gnostis/internal/chunker"
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 func TestStoreAddAndQuery(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := NewStore(ctx, dir)
+	s, err := NewStore(ctx, dir, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
@@ -44,7 +45,7 @@ func TestStoreDeleteByPath(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	s, err := NewStore(ctx, dir)
+	s, err := NewStore(ctx, dir, db.OpenTestDB(t))
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}

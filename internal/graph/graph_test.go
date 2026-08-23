@@ -1,11 +1,10 @@
 package graph
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/quonaro/gnostis/internal/chunker"
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 func TestAddChunk(t *testing.T) {
@@ -106,19 +105,18 @@ func TestCalleesAndCallers(t *testing.T) {
 }
 
 func TestSaveLoad(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "call_graph.json")
+	sqlDB := db.OpenTestDB(t)
 
 	g := New()
 	g.AddChunk(chunker.Chunk{Path: "/foo.go", Symbol: "main", Kind: "function", Calls: []chunker.CallRef{{Name: "greet"}}})
 	g.AddChunk(chunker.Chunk{Path: "/foo.go", Symbol: "greet", Kind: "function"})
 
-	if err := g.Save(path); err != nil {
+	if err := g.Save(sqlDB); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
 	g2 := New()
-	if err := g2.Load(path); err != nil {
+	if err := g2.Load(sqlDB); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 
@@ -132,9 +130,10 @@ func TestSaveLoad(t *testing.T) {
 }
 
 func TestLoadMissingFile(t *testing.T) {
+	sqlDB := db.OpenTestDB(t)
 	g := New()
-	if err := g.Load("/nonexistent/path/graph.json"); err != nil {
-		t.Errorf("Load should return nil for missing file, got %v", err)
+	if err := g.Load(sqlDB); err != nil {
+		t.Errorf("Load on empty db should not error, got %v", err)
 	}
 }
 
@@ -146,17 +145,13 @@ func TestNodeID(t *testing.T) {
 }
 
 func TestSaveCreatesDir(t *testing.T) {
-	dir := t.TempDir()
-	nested := filepath.Join(dir, "nested", "deep", "call_graph.json")
+	sqlDB := db.OpenTestDB(t)
 
 	g := New()
 	g.AddChunk(chunker.Chunk{Path: "/foo.go", Symbol: "main", Kind: "function"})
 
-	if err := g.Save(nested); err != nil {
+	if err := g.Save(sqlDB); err != nil {
 		t.Fatalf("Save: %v", err)
-	}
-	if _, err := os.Stat(nested); err != nil {
-		t.Fatalf("file not created: %v", err)
 	}
 }
 
@@ -183,19 +178,18 @@ func TestHasFile(t *testing.T) {
 }
 
 func TestHasFileAfterLoad(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "call_graph.json")
+	sqlDB := db.OpenTestDB(t)
 
 	g := New()
 	g.AddChunk(chunker.Chunk{Path: "/foo.go", Symbol: "main", Kind: "function"})
 	g.AddChunk(chunker.Chunk{Path: "/bar.go", Symbol: "helper", Kind: "function"})
 
-	if err := g.Save(path); err != nil {
+	if err := g.Save(sqlDB); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
 	g2 := New()
-	if err := g2.Load(path); err != nil {
+	if err := g2.Load(sqlDB); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 

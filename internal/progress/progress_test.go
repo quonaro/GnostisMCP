@@ -2,15 +2,14 @@ package progress
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 func TestProgressStateLifecycle(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "progress.json")
-	p := New(path)
+	p := New(db.OpenTestDB(t))
 
 	if err := p.Start("test", 100); err != nil {
 		t.Fatalf("start failed: %v", err)
@@ -50,9 +49,7 @@ func TestProgressStateLifecycle(t *testing.T) {
 }
 
 func TestProgressFail(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "progress.json")
-	p := New(path)
+	p := New(db.OpenTestDB(t))
 
 	_ = p.Start("test", 10)
 	_ = p.Fail(os.ErrClosed)
@@ -67,9 +64,7 @@ func TestProgressFail(t *testing.T) {
 }
 
 func TestProgressLoadMissing(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "missing.json")
-	p := New(path)
+	p := New(db.OpenTestDB(t))
 
 	s, err := p.Load()
 	if err != nil {
@@ -81,13 +76,15 @@ func TestProgressLoadMissing(t *testing.T) {
 }
 
 func TestProgressLoadPreservesJobID(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "progress.json")
-	if err := os.WriteFile(path, []byte(`{"job_id":"project:RuobrOld-123","status":"running","project":"RuobrOld"}`), 0o644); err != nil {
-		t.Fatalf("write progress file: %v", err)
+	sqlDB := db.OpenTestDB(t)
+
+	// Simulate a previous run by inserting a row directly.
+	_, err := sqlDB.Exec(`INSERT INTO progress_state (id, job_id, status, project) VALUES (1, 'project:RuobrOld-123', 'running', 'RuobrOld')`)
+	if err != nil {
+		t.Fatalf("insert progress row: %v", err)
 	}
 
-	p := New(path)
+	p := New(sqlDB)
 	s, err := p.Load()
 	if err != nil {
 		t.Fatalf("load failed: %v", err)

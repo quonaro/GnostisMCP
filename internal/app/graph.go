@@ -16,7 +16,7 @@ func (a *App) saveCallGraph() {
 	if a.callGraph == nil {
 		return
 	}
-	if err := a.callGraph.Save(a.cfg.DataDir + "/call_graph.json"); err != nil {
+	if err := a.callGraph.Save(a.sqlDB); err != nil {
 		slog.Error("save call graph", "error", err)
 	}
 }

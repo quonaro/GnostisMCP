@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -43,6 +45,10 @@ func indexDirectoryWithRetry(ctx context.Context, out io.Writer, dir directory.D
 			return nil
 		}
 		lastErr = err
+		if errors.Is(err, fs.ErrNotExist) {
+			slog.WarnContext(ctx, "project directory does not exist, skipping", "project", proj.Name, "path", dir.Path)
+			return err
+		}
 		if attempt < maxIndexRetries-1 {
 			slog.WarnContext(ctx, "index attempt failed, retrying", "project", proj.Name, "attempt", attempt+1, "error", err, "backoff", indexBackoff[attempt])
 			select {

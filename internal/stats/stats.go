@@ -1,10 +1,8 @@
 package stats
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -23,39 +21,39 @@ type Project struct {
 
 // Stats persists per-project indexing statistics.
 type Stats struct {
-	mu   sync.Mutex
-	path string
-	data map[string]Project
+	mu    sync.Mutex
+	sqlDB *sql.DB
+	data  map[string]Project
 }
 
-// New creates a Stats writer for the given file path.
-func New(path string) *Stats {
+// New creates a Stats writer backed by SQLite.
+func New(sqlDB *sql.DB) *Stats {
 	return &Stats{
-		path: path,
-		data: make(map[string]Project),
+		sqlDB: sqlDB,
+		data:  make(map[string]Project),
 	}
 }
 
-// Load reads the persisted stats from disk. If the file does not exist, it
-// returns an empty map.
+// Load reads the persisted stats from SQLite.
 func (s *Stats) Load() (map[string]Project, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	data, err := os.ReadFile(s.path)
+	rows, err := s.sqlDB.Query(`SELECT project, path, chunks, last_indexed_at, model FROM project_stats`)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]Project{}, nil
+		return nil, fmt.Errorf("query project stats: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var p Project
+		var project, lastIndexedAt string
+		if err := rows.Scan(&project, &p.Path, &p.Chunks, &lastIndexedAt, &p.Model); err != nil {
+			return nil, fmt.Errorf("scan stats row: %w", err)
 		}
-		return nil, fmt.Errorf("read stats file: %w", err)
+		p.LastIndexedAt, _ = time.Parse(time.RFC3339Nano, lastIndexedAt)
+		s.data[project] = p
 	}
-
-	var loaded map[string]Project
-	if err := json.Unmarshal(data, &loaded); err != nil {
-		return nil, fmt.Errorf("decode stats file: %w", err)
-	}
-	s.data = loaded
-	return loaded, nil
+	return s.data, rows.Err()
 }
 
 // Update records the chunk count, embedding model, and current time for the
@@ -64,37 +62,16 @@ func (s *Stats) Update(project string, chunks int, model string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	now := time.Now().UTC()
 	s.data[project] = Project{
 		Chunks:        chunks,
 		Model:         model,
-		LastIndexedAt: time.Now().UTC(),
+		LastIndexedAt: now,
 	}
-	return s.saveLocked()
-}
-
-func (s *Stats) saveLocked() error {
-	if s.path == "" {
-		return nil
-	}
-
-	data, err := json.MarshalIndent(s.data, "", "  ")
+	_, err := s.sqlDB.Exec(`INSERT OR REPLACE INTO project_stats (project, path, chunks, last_indexed_at, model) VALUES (?, ?, ?, ?, ?)`,
+		project, s.data[project].Path, chunks, now.Format(time.RFC3339Nano), model)
 	if err != nil {
-		return fmt.Errorf("marshal stats: %w", err)
+		return fmt.Errorf("upsert project stats: %w", err)
 	}
-
-	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create stats dir: %w", err)
-	}
-
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write stats temp file: %w", err)
-	}
-
-	if err := os.Rename(tmp, s.path); err != nil {
-		return fmt.Errorf("rename stats file: %w", err)
-	}
-
 	return nil
 }

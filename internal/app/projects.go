@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,10 +12,10 @@ import (
 	"github.com/quonaro/gnostis/internal/project"
 )
 
-// resolveProjects loads project JSON files from the projects directory and
-// creates directory/project pairs.
-func resolveProjects(cfg config.Config) ([]directory.Directory, []project.Project, error) {
-	dirs, err := config.LoadProjectFiles(cfg.ProjectsDirPath)
+// resolveProjects loads project configs from SQLite and creates
+// directory/project pairs.
+func resolveProjects(cfg config.Config, sqlDB *sql.DB) ([]directory.Directory, []project.Project, error) {
+	dirs, err := config.LoadProjectFiles(sqlDB)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load project files: %w", err)
 	}
@@ -72,7 +73,7 @@ func (a *App) AddProject(ctx context.Context, path, name string, extensions, inc
 		MaxFileSizeMB: maxFileSizeMB,
 	}
 
-	if err := config.SaveProjectFile(a.cfg.ProjectsDirPath, d); err != nil {
+	if err := config.SaveProjectFile(a.sqlDB, d); err != nil {
 		return "", fmt.Errorf("save project file: %w", err)
 	}
 
@@ -112,7 +113,7 @@ func (a *App) EditProject(ctx context.Context, name string, extensions, include,
 		MaxFileSizeMB: maxFileSizeMB,
 	}
 
-	if err := config.SaveProjectFile(a.cfg.ProjectsDirPath, d); err != nil {
+	if err := config.SaveProjectFile(a.sqlDB, d); err != nil {
 		return fmt.Errorf("save project file: %w", err)
 	}
 
@@ -156,7 +157,7 @@ func (a *App) RemoveProject(ctx context.Context, name string) error {
 	a.projects = append(a.projects[:idx], a.projects[idx+1:]...)
 	a.updateSnapshots(a.cfg, a.projects)
 
-	if err := config.DeleteProjectFile(a.cfg.ProjectsDirPath, name); err != nil {
+	if err := config.DeleteProjectFile(a.sqlDB, name); err != nil {
 		return fmt.Errorf("delete project file: %w", err)
 	}
 

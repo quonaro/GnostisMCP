@@ -1,15 +1,14 @@
 package stats
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 func TestStatsUpdateAndLoad(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "stats.json")
-	s := New(path)
+	s := New(db.OpenTestDB(t))
 
 	if err := s.Update("foo", 42, "nomic-embed-text"); err != nil {
 		t.Fatalf("update failed: %v", err)
@@ -33,9 +32,7 @@ func TestStatsUpdateAndLoad(t *testing.T) {
 }
 
 func TestStatsLoadMissing(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "missing.json")
-	s := New(path)
+	s := New(db.OpenTestDB(t))
 
 	loaded, err := s.Load()
 	if err != nil {
@@ -47,9 +44,7 @@ func TestStatsLoadMissing(t *testing.T) {
 }
 
 func TestStatsUpdateOverwrites(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "stats.json")
-	s := New(path)
+	s := New(db.OpenTestDB(t))
 
 	_ = s.Update("foo", 10, "nomic-embed-text")
 	before, _ := s.Load()

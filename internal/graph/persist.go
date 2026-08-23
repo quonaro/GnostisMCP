@@ -1,69 +1,90 @@
 package graph
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
+	"database/sql"
+	"fmt"
 )
 
-// persistData is the on-disk representation of the graph.
-type persistData struct {
-	Nodes []Node `json:"nodes"`
-	Edges []Edge `json:"edges"`
-}
-
-// Save writes the graph to a JSON file at the given path.
-func (g *Graph) Save(path string) error {
+// Save writes the graph to SQLite.
+func (g *Graph) Save(db *sql.DB) error {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
-	data := persistData{
-		Nodes: make([]Node, 0, len(g.nodes)),
-		Edges: make([]Edge, len(g.edges)),
-	}
-	for _, n := range g.nodes {
-		data.Nodes = append(data.Nodes, n)
-	}
-	copy(data.Edges, g.edges)
-
-	b, err := json.Marshal(data)
+	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("begin tx: %w", err)
 	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+	if _, err := tx.Exec(`DELETE FROM graph_nodes`); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete graph nodes: %w", err)
 	}
-
-	return os.WriteFile(path, b, 0o644)
+	if _, err := tx.Exec(`DELETE FROM graph_edges`); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete graph edges: %w", err)
+	}
+	nodeStmt, err := tx.Prepare(`INSERT INTO graph_nodes (id, path, symbol, kind, language, start_line, end_line) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("prepare node insert: %w", err)
+	}
+	defer func() { _ = nodeStmt.Close() }()
+	for _, n := range g.nodes {
+		if _, err := nodeStmt.Exec(n.ID, n.Path, n.Symbol, n.Kind, n.Language, n.StartLine, n.EndLine); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("insert node %s: %w", n.ID, err)
+		}
+	}
+	edgeStmt, err := tx.Prepare(`INSERT INTO graph_edges (from_id, "to", line) VALUES (?, ?, ?)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("prepare edge insert: %w", err)
+	}
+	defer func() { _ = edgeStmt.Close() }()
+	for _, e := range g.edges {
+		if _, err := edgeStmt.Exec(e.From, e.To, e.Line); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("insert edge: %w", err)
+		}
+	}
+	return tx.Commit()
 }
 
-// Load reads the graph from a JSON file at the given path.
-func (g *Graph) Load(path string) error {
-	b, err := os.ReadFile(path)
+// Load reads the graph from SQLite.
+func (g *Graph) Load(db *sql.DB) error {
+	rows, err := db.Query(`SELECT id, path, symbol, kind, language, start_line, end_line FROM graph_nodes`)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
+		return fmt.Errorf("query graph nodes: %w", err)
 	}
-
-	var data persistData
-	if err := json.Unmarshal(b, &data); err != nil {
-		return err
-	}
+	defer func() { _ = rows.Close() }()
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	g.nodes = make(map[string]Node, len(data.Nodes))
-	g.files = make(map[string]bool, len(data.Nodes))
-	for _, n := range data.Nodes {
+	g.nodes = make(map[string]Node)
+	g.files = make(map[string]bool)
+	for rows.Next() {
+		var n Node
+		if err := rows.Scan(&n.ID, &n.Path, &n.Symbol, &n.Kind, &n.Language, &n.StartLine, &n.EndLine); err != nil {
+			return fmt.Errorf("scan node row: %w", err)
+		}
 		g.nodes[n.ID] = n
 		g.files[n.Path] = true
 	}
-	g.edges = data.Edges
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate nodes: %w", err)
+	}
 
-	return nil
+	edgeRows, err := db.Query(`SELECT from_id, "to", line FROM graph_edges`)
+	if err != nil {
+		return fmt.Errorf("query graph edges: %w", err)
+	}
+	defer func() { _ = edgeRows.Close() }()
+	for edgeRows.Next() {
+		var e Edge
+		if err := edgeRows.Scan(&e.From, &e.To, &e.Line); err != nil {
+			return fmt.Errorf("scan edge row: %w", err)
+		}
+		g.edges = append(g.edges, e)
+	}
+	return edgeRows.Err()
 }

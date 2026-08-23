@@ -204,7 +204,7 @@ func (a *App) ReloadConfig(ctx context.Context) error {
 	cfg.Embeddings = a.cfg.Embeddings
 	cfg.ProjectsDirPath = a.cfg.ProjectsDirPath
 
-	dirs, projects, err := resolveProjects(cfg)
+	dirs, projects, err := resolveProjects(cfg, a.sqlDB)
 	if err != nil {
 		return fmt.Errorf("resolve projects: %w", err)
 	}
@@ -245,7 +245,7 @@ func (a *App) reloadMemoryManager(ctx context.Context) error {
 	}
 
 	dataDir := config.InterpolateEnv(config.DefaultMemoryDataDir)
-	mgr, err := memory.NewManager(a.cfg.Memory, dataDir, a.provider)
+	mgr, err := memory.NewManager(a.cfg.Memory, dataDir, a.provider, a.sqlDB)
 	if err != nil {
 		return fmt.Errorf("create memory manager: %w", err)
 	}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/quonaro/gnostis/internal/chunker"
 	"github.com/quonaro/gnostis/internal/config"
+	"github.com/quonaro/gnostis/internal/db"
 	"github.com/quonaro/gnostis/internal/directory"
 	"github.com/quonaro/gnostis/internal/embeddings"
 	"github.com/quonaro/gnostis/internal/graph"
@@ -35,6 +37,7 @@ import (
 // App orchestrates configuration, indexing, search, and the MCP server.
 type App struct {
 	cfg            config.Config
+	sqlDB          *sql.DB
 	dirs           []directory.Directory
 	projects       []project.Project
 	store          store.VectorStore
@@ -73,37 +76,48 @@ type App struct {
 func New(cfg config.Config) (*App, error) {
 	slog.Info("initializing app", "data_dir", cfg.DataDir, "provider", cfg.Embeddings.Provider, "model", cfg.Embeddings.Model)
 
-	dirs, projects, err := resolveProjects(cfg)
+	sqlDB, err := db.Open(filepath.Join(cfg.DataDir, "gnostis.db"))
 	if err != nil {
+		return nil, fmt.Errorf("open sqlite db: %w", err)
+	}
+
+	dirs, projects, err := resolveProjects(cfg, sqlDB)
+	if err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("resolve projects: %w", err)
 	}
 
 	ctx := context.Background()
 
-	st, err := store.New(ctx, cfg.DataDir)
+	st, err := store.New(ctx, cfg.DataDir, sqlDB)
 	if err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("create store: %w", err)
 	}
 
 	provider, err := embeddings.New(cfg.Embeddings)
 	if err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("create embeddings provider: %w", err)
 	}
 
 	engine := search.New(st, provider)
 
-	symbolIndex, err := symbol.New(filepath.Join(cfg.DataDir, "symbols.json"))
+	symbolIndex, err := symbol.New(sqlDB)
 	if err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("create symbol index: %w", err)
 	}
 
 	callGraph := graph.New()
-	if err := callGraph.Load(filepath.Join(cfg.DataDir, "call_graph.json")); err != nil {
+	if err := callGraph.Load(sqlDB); err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("load call graph: %w", err)
 	}
 
-	simhashIndex, err := simhash.NewIndex(filepath.Join(cfg.DataDir, "simhash.json"))
+	simhashIndex, err := simhash.NewIndex(sqlDB)
 	if err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("create simhash index: %w", err)
 	}
 
@@ -111,6 +125,7 @@ func New(cfg config.Config) (*App, error) {
 
 	a := &App{
 		cfg:              cfg,
+		sqlDB:            sqlDB,
 		dirs:             dirs,
 		projects:         projects,
 		store:            st,
@@ -122,8 +137,8 @@ func New(cfg config.Config) (*App, error) {
 		callGraph:        callGraph,
 		simhashIndex:     simhashIndex,
 		embeddingCache:   embeddingCache,
-		progress:         progress.New(filepath.Join(cfg.DataDir, "indexing-progress.json")),
-		indexingStats:    stats.New(filepath.Join(cfg.DataDir, "project-stats.json")),
+		progress:         progress.New(sqlDB),
+		indexingStats:    stats.New(sqlDB),
 		jobQueue:         jobs.New(20),
 		watcherRestartCh: make(chan struct{}, 1),
 		changesCache:     make(map[string]changesCacheEntry),
@@ -133,11 +148,13 @@ func New(cfg config.Config) (*App, error) {
 
 	if memoryEnabled(cfg.Memory) {
 		dataDir := config.InterpolateEnv(config.DefaultMemoryDataDir)
-		mgr, err := memory.NewManager(cfg.Memory, dataDir, provider)
+		mgr, err := memory.NewManager(cfg.Memory, dataDir, provider, sqlDB)
 		if err != nil {
+			_ = sqlDB.Close()
 			return nil, fmt.Errorf("create memory manager: %w", err)
 		}
 		if err := mgr.Start(context.Background()); err != nil {
+			_ = sqlDB.Close()
 			return nil, fmt.Errorf("start memory manager: %w", err)
 		}
 		a.memoryMgr = mgr

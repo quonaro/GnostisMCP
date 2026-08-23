@@ -1,13 +1,13 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
+
+	"github.com/quonaro/gnostis/internal/db"
 )
 
 func TestSaveAndLoadProjectFile(t *testing.T) {
-	dir := t.TempDir()
+	sqlDB := db.OpenTestDB(t)
 
 	d := Directory{
 		Path:          "/some/path",
@@ -15,17 +15,12 @@ func TestSaveAndLoadProjectFile(t *testing.T) {
 		MaxFileSizeMB: 5,
 	}
 
-	if err := SaveProjectFile(dir, d); err != nil {
+	if err := SaveProjectFile(sqlDB, d); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	// Verify file exists.
-	if _, err := os.Stat(filepath.Join(dir, "my-project.json")); err != nil {
-		t.Fatalf("project file not created: %v", err)
-	}
-
 	// Load and verify.
-	dirs, err := LoadProjectFiles(dir)
+	dirs, err := LoadProjectFiles(sqlDB)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -44,33 +39,37 @@ func TestSaveAndLoadProjectFile(t *testing.T) {
 }
 
 func TestDeleteProjectFile(t *testing.T) {
-	dir := t.TempDir()
+	sqlDB := db.OpenTestDB(t)
 
 	d := Directory{Path: "/x", Name: "to-delete"}
-	if err := SaveProjectFile(dir, d); err != nil {
+	if err := SaveProjectFile(sqlDB, d); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	if err := DeleteProjectFile(dir, "to-delete"); err != nil {
+	if err := DeleteProjectFile(sqlDB, "to-delete"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
-	// File should be gone.
-	if _, err := os.Stat(filepath.Join(dir, "to-delete.json")); !os.IsNotExist(err) {
-		t.Fatalf("expected file to be deleted, got err=%v", err)
+	// Row should be gone.
+	dirs, err := LoadProjectFiles(sqlDB)
+	if err != nil {
+		t.Fatalf("load after delete: %v", err)
+	}
+	if len(dirs) != 0 {
+		t.Fatalf("expected 0 projects after delete, got %d", len(dirs))
 	}
 
-	// Deleting a non-existent file should not error.
-	if err := DeleteProjectFile(dir, "nonexistent"); err != nil {
+	// Deleting a non-existent project should not error.
+	if err := DeleteProjectFile(sqlDB, "nonexistent"); err != nil {
 		t.Fatalf("delete nonexistent: %v", err)
 	}
 }
 
 func TestLoadProjectFilesEmptyDir(t *testing.T) {
-	dir := t.TempDir()
-	dirs, err := LoadProjectFiles(dir)
+	sqlDB := db.OpenTestDB(t)
+	dirs, err := LoadProjectFiles(sqlDB)
 	if err != nil {
-		t.Fatalf("load from empty dir: %v", err)
+		t.Fatalf("load from empty db: %v", err)
 	}
 	if dirs != nil {
 		t.Fatalf("expected nil, got %v", dirs)
@@ -78,10 +77,10 @@ func TestLoadProjectFilesEmptyDir(t *testing.T) {
 }
 
 func TestLoadProjectFilesMissingDir(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "nonexistent")
-	dirs, err := LoadProjectFiles(dir)
+	sqlDB := db.OpenTestDB(t)
+	dirs, err := LoadProjectFiles(sqlDB)
 	if err != nil {
-		t.Fatalf("load from missing dir: %v", err)
+		t.Fatalf("load from empty db: %v", err)
 	}
 	if dirs != nil {
 		t.Fatalf("expected nil, got %v", dirs)
@@ -89,28 +88,34 @@ func TestLoadProjectFilesMissingDir(t *testing.T) {
 }
 
 func TestSaveProjectFileSanitizesName(t *testing.T) {
-	dir := t.TempDir()
+	sqlDB := db.OpenTestDB(t)
 
 	d := Directory{Path: "/some/path", Name: "my/sub-project"}
-	if err := SaveProjectFile(dir, d); err != nil {
+	if err := SaveProjectFile(sqlDB, d); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	// File should be flat, not in a subdirectory.
-	if _, err := os.Stat(filepath.Join(dir, "my_sub-project.json")); err != nil {
-		t.Fatalf("sanitized project file not created: %v", err)
+	// Load and verify the name is preserved as-is (SQLite handles naming).
+	dirs, err := LoadProjectFiles(sqlDB)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(dirs) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(dirs))
+	}
+	if dirs[0].Name != "my/sub-project" {
+		t.Errorf("name = %q, want my/sub-project", dirs[0].Name)
 	}
 
-	// No subdirectory should exist.
-	if _, err := os.Stat(filepath.Join(dir, "my")); !os.IsNotExist(err) {
-		t.Fatalf("unexpected subdirectory created, err=%v", err)
-	}
-
-	// Delete should also use the sanitized name.
-	if err := DeleteProjectFile(dir, "my/sub-project"); err != nil {
+	// Delete should also work with the original name.
+	if err := DeleteProjectFile(sqlDB, "my/sub-project"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "my_sub-project.json")); !os.IsNotExist(err) {
-		t.Fatalf("expected file to be deleted, got err=%v", err)
+	dirs, err = LoadProjectFiles(sqlDB)
+	if err != nil {
+		t.Fatalf("load after delete: %v", err)
+	}
+	if len(dirs) != 0 {
+		t.Fatalf("expected 0 projects after delete, got %d", len(dirs))
 	}
 }
