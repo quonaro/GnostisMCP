@@ -83,9 +83,7 @@ func (a *App) AddProject(ctx context.Context, path, name string, extensions, inc
 	if a.mcp != nil {
 		a.mcp.ReloadProjects(a.projects)
 	}
-	if err := a.restartWatcher(ctx); err != nil {
-		return "", fmt.Errorf("restart watcher: %w", err)
-	}
+	a.scheduleWatcherRestart()
 	return name, nil
 }
 
@@ -124,9 +122,7 @@ func (a *App) EditProject(ctx context.Context, name string, extensions, include,
 	if a.mcp != nil {
 		a.mcp.ReloadProjects(a.projects)
 	}
-	if err := a.restartWatcher(ctx); err != nil {
-		return fmt.Errorf("restart watcher: %w", err)
-	}
+	a.scheduleWatcherRestart()
 	return nil
 }
 
@@ -167,9 +163,7 @@ func (a *App) RemoveProject(ctx context.Context, name string) error {
 	if a.mcp != nil {
 		a.mcp.ReloadProjects(a.projects)
 	}
-	if err := a.restartWatcher(ctx); err != nil {
-		return fmt.Errorf("restart watcher: %w", err)
-	}
+	a.scheduleWatcherRestart()
 	return nil
 }
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { activeSection, progress, status, type Section } from '../lib/stores'
-  import { LayoutGrid, Search, FolderGit2, Database, Activity } from '@lucide/svelte'
+  import { activeSection, progress, status, searchOpen, type Section } from '../lib/stores'
+  import { LayoutGrid, Activity, Network, Building2, Trash2, GitBranch, Search as SearchIcon } from '@lucide/svelte'
   import type { Snippet } from 'svelte'
 
   let section = $derived($activeSection)
@@ -19,8 +19,10 @@
 
   const items: { id: Section; label: string; icon: typeof LayoutGrid }[] = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
-    { id: 'search', label: 'Search', icon: Search },
-    { id: 'projects', label: 'Projects', icon: FolderGit2 },
+    { id: 'graph', label: 'Graph', icon: Network },
+    { id: 'architecture', label: 'Architecture', icon: Building2 },
+    { id: 'dead-code', label: 'Dead Code', icon: Trash2 },
+    { id: 'changes', label: 'Changes', icon: GitBranch },
   ]
 
   function select(id: Section) {
@@ -31,14 +33,20 @@
 <aside class="hidden md:flex w-64 h-screen sticky top-0 bg-card border-r border-border flex-col shrink-0">
   <div class="p-4 border-b border-border shrink-0">
     <div class="flex items-center gap-2">
-      <div class="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-        <Database class="w-5 h-5 text-primary" />
-      </div>
-      <div>
-        <div class="font-semibold text-foreground">Gnostis</div>
-        <div class="text-xs text-muted-foreground">Code Index</div>
-      </div>
+      <img src="/gnostis-logo.svg" alt="Gnostis" class="w-8 h-8 rounded-lg" />
+      <div class="font-bold text-2xl text-foreground tracking-wide">GNOSTIS</div>
     </div>
+  </div>
+
+  <div class="px-3 pt-2">
+    <button
+      onclick={() => searchOpen.set(true)}
+      class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+    >
+      <SearchIcon class="w-4 h-4" />
+      <span>Search</span>
+      <kbd class="ml-auto text-[10px] rounded border border-border px-1.5 py-0.5 text-muted-foreground/70">⌘K</kbd>
+    </button>
   </div>
 
   <nav class="flex-1 p-3 space-y-1">

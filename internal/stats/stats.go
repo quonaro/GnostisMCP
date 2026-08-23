@@ -14,6 +14,11 @@ type Project struct {
 	Path          string    `json:"path"`
 	Chunks        int       `json:"chunks"`
 	LastIndexedAt time.Time `json:"last_indexed_at"`
+	Model         string    `json:"model,omitempty"`
+	Extensions    []string  `json:"extensions,omitempty"`
+	Include       []string  `json:"include,omitempty"`
+	Exclude       []string  `json:"exclude,omitempty"`
+	MaxFileSizeMB int       `json:"max_file_size_mb,omitempty"`
 }
 
 // Stats persists per-project indexing statistics.
@@ -53,13 +58,15 @@ func (s *Stats) Load() (map[string]Project, error) {
 	return loaded, nil
 }
 
-// Update records the chunk count and current time for the given project.
-func (s *Stats) Update(project string, chunks int) error {
+// Update records the chunk count, embedding model, and current time for the
+// given project.
+func (s *Stats) Update(project string, chunks int, model string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.data[project] = Project{
 		Chunks:        chunks,
+		Model:         model,
 		LastIndexedAt: time.Now().UTC(),
 	}
 	return s.saveLocked()

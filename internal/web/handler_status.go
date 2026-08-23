@@ -7,20 +7,27 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/quonaro/gnostis/internal/jobs"
+	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/stats"
+	"github.com/quonaro/gnostis/internal/sysmetrics"
 )
 
 type statusResponse struct {
-	Projects     []string                 `json:"projects"`
-	TotalChunks  int                      `json:"total_chunks"`
-	Provider     string                   `json:"provider"`
-	Model        string                   `json:"model"`
-	Symbols      int                      `json:"symbols"`
-	Progress     progress.State           `json:"progress"`
-	ETA          string                   `json:"eta,omitempty"`
-	ETASeconds   int64                    `json:"eta_seconds,omitempty"`
-	ProjectStats map[string]stats.Project `json:"project_stats"`
+	Projects       []string                 `json:"projects"`
+	TotalChunks    int                      `json:"total_chunks"`
+	Provider       string                   `json:"provider"`
+	Model          string                   `json:"model"`
+	Symbols        int                      `json:"symbols"`
+	Progress       progress.State           `json:"progress"`
+	ETA            string                   `json:"eta,omitempty"`
+	ETASeconds     int64                    `json:"eta_seconds,omitempty"`
+	ProjectStats   map[string]stats.Project `json:"project_stats"`
+	MemoryStats    []memory.ProviderStat    `json:"memory_stats,omitempty"`
+	MemoryProgress *memory.ProgressState    `json:"memory_progress,omitempty"`
+	Jobs           []jobs.Job               `json:"jobs,omitempty"`
+	SysMetrics     *sysmetrics.Metrics      `json:"sys_metrics,omitempty"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -43,16 +50,24 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	memStats := s.app.MemoryStats(ctx)
+	memProgress := s.app.MemoryProgressState()
+
 	eta := pstate.ETA()
+	sm := s.metrics.Collect()
 	resp := statusResponse{
-		Projects:     projects,
-		TotalChunks:  chunks,
-		Provider:     provider,
-		Model:        model,
-		Symbols:      symbols,
-		Progress:     pstate,
-		ProjectStats: pst,
+		Projects:       projects,
+		TotalChunks:    chunks,
+		Provider:       provider,
+		Model:          model,
+		Symbols:        symbols,
+		Progress:       pstate,
+		ProjectStats:   pst,
+		MemoryStats:    memStats,
+		MemoryProgress: &memProgress,
+		SysMetrics:     &sm,
 	}
+	resp.Jobs = s.app.Jobs()
 	if eta > 0 {
 		resp.ETA = eta.String()
 		resp.ETASeconds = int64(eta.Seconds())
@@ -92,20 +107,29 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("project stats: %w", err)
 		}
 
+		memStats := s.app.MemoryStats(ctx)
+		memProgress := s.app.MemoryProgressState()
+
 		eta := pstate.ETA()
 		resp := statusResponse{
-			Projects:     projects,
-			TotalChunks:  chunks,
-			Provider:     provider,
-			Model:        model,
-			Symbols:      symbols,
-			Progress:     pstate,
-			ProjectStats: pst,
+			Projects:       projects,
+			TotalChunks:    chunks,
+			Provider:       provider,
+			Model:          model,
+			Symbols:        symbols,
+			Progress:       pstate,
+			ProjectStats:   pst,
+			MemoryStats:    memStats,
+			MemoryProgress: &memProgress,
 		}
+		resp.Jobs = s.app.Jobs()
 		if eta > 0 {
 			resp.ETA = eta.String()
 			resp.ETASeconds = int64(eta.Seconds())
 		}
+
+		sm := s.metrics.Collect()
+		resp.SysMetrics = &sm
 
 		payload, err := json.Marshal(resp)
 		if err != nil {

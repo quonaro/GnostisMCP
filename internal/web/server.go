@@ -7,9 +7,14 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/quonaro/gnostis/internal/coverage"
+	"github.com/quonaro/gnostis/internal/graph"
+	"github.com/quonaro/gnostis/internal/jobs"
+	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/search"
 	"github.com/quonaro/gnostis/internal/stats"
+	"github.com/quonaro/gnostis/internal/sysmetrics"
 )
 
 // App is the subset of the application used by the web server.
@@ -18,12 +23,27 @@ type App interface {
 	Info() (provider, model string, symbols int)
 	ProgressState() (progress.State, error)
 	ProjectStats(ctx context.Context) (map[string]stats.Project, error)
+	MemoryStats(ctx context.Context) []memory.ProviderStat
+	MemoryProgressState() memory.ProgressState
+	MemoryFiles(ctx context.Context) []memory.FileInfo
+	MemoryDataDir() string
 	StartRebuildProject(ctx context.Context, name string) (string, error)
 	StartRebuildIndex(ctx context.Context) (string, error)
 	AddProject(ctx context.Context, path, name string, extensions, include, exclude []string, maxFileSizeMB int) (string, error)
 	EditProject(ctx context.Context, name string, extensions, include, exclude []string, maxFileSizeMB int) error
 	RemoveProject(ctx context.Context, name string) error
+	ProjectPath(name string) (string, error)
 	ReindexFiles(ctx context.Context, paths []string) error
+	GraphLayout(project string, connectedOnly bool, maxNodes int) (graph.LayoutResult, error)
+	Architecture(ctx context.Context, project string) (*graph.Architecture, error)
+	DeadCode(ctx context.Context, project, kind string, topK int) ([]graph.DeadCodeCandidate, error)
+	DetectChanges(ctx context.Context, project string) ([]coverage.Change, error)
+	Jobs() []jobs.Job
+}
+
+// Searcher is the subset of the search engine used by the web server.
+type Searcher interface {
+	Search(ctx context.Context, query string, filters map[string]string, topK int) ([]search.Result, error)
 }
 
 // Server is the HTTP dashboard server.
@@ -31,12 +51,8 @@ type Server struct {
 	app        App
 	search     Searcher
 	mcpHandler http.Handler
+	metrics    *sysmetrics.Collector
 	mux        *http.ServeMux
-}
-
-// Searcher is the subset of the search engine used by the web server.
-type Searcher interface {
-	Search(ctx context.Context, query string, filters map[string]string, topK int) ([]search.Result, error)
 }
 
 // New creates a new web server. If mcpHandler is non-nil it is mounted at /mcp
@@ -46,6 +62,7 @@ func New(app App, srch Searcher, mcpHandler http.Handler) *Server {
 		app:        app,
 		search:     srch,
 		mcpHandler: mcpHandler,
+		metrics:    sysmetrics.NewCollector(),
 		mux:        http.NewServeMux(),
 	}
 	s.registerRoutes()
@@ -61,8 +78,15 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/projects/add", s.handleAddProject)
 	s.mux.HandleFunc("POST /api/projects/edit", s.handleEditProject)
 	s.mux.HandleFunc("POST /api/projects/remove", s.handleRemoveProject)
+	s.mux.HandleFunc("POST /api/projects/open", s.handleOpenProject)
 	s.mux.HandleFunc("POST /api/reindex", s.handleReindex)
 	s.mux.HandleFunc("GET /api/search", s.handleSearch)
+	s.mux.HandleFunc("GET /api/graph", s.handleGraph)
+	s.mux.HandleFunc("GET /api/architecture", s.handleArchitecture)
+	s.mux.HandleFunc("GET /api/dead-code", s.handleDeadCode)
+	s.mux.HandleFunc("GET /api/changes", s.handleChanges)
+	s.mux.HandleFunc("GET /api/memory/files", s.handleMemoryFiles)
+	s.mux.HandleFunc("POST /api/memory/open", s.handleOpenMemoryFile)
 	if s.mcpHandler != nil {
 		s.mux.Handle("/mcp", s.mcpHandler)
 	}

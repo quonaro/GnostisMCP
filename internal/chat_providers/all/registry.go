@@ -3,7 +3,6 @@ package all
 import (
 	"github.com/quonaro/gnostis/internal/chat_providers"
 	"github.com/quonaro/gnostis/internal/chat_providers/cascade"
-	"github.com/quonaro/gnostis/internal/chat_providers/cursor"
 )
 
 // Registry lists all built-in chat providers.
@@ -16,7 +15,6 @@ func NewRegistry() *Registry {
 	return &Registry{
 		providers: []chat_providers.Provider{
 			cascade.NewProvider(),
-			cursor.NewProvider(),
 		},
 	}
 }

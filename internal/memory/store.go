@@ -193,6 +193,29 @@ func (s *Store) Count() int {
 	return s.col.Count()
 }
 
+// CountByProvider returns the number of memory chunks for a given provider ID.
+func (s *Store) CountByProvider(ctx context.Context, providerID string) (int, error) {
+	if providerID == "" {
+		return 0, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.dim == 0 || s.col.Count() == 0 {
+		return 0, nil
+	}
+
+	query := make([]float32, s.dim)
+	query[0] = 1
+
+	results, err := s.col.QueryEmbedding(ctx, query, s.col.Count(), map[string]string{"project_id": projectIDPrefix + providerID}, nil)
+	if err != nil {
+		return 0, fmt.Errorf("query memory provider %q: %w", providerID, err)
+	}
+	return len(results), nil
+}
+
 func validateEmbeddings(vectors [][]float32) (int, error) {
 	if len(vectors) == 0 {
 		return 0, fmt.Errorf("no embeddings")

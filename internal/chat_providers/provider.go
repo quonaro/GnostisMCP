@@ -7,9 +7,9 @@ type Turn struct {
 }
 
 // Provider abstracts a local chat client that stores conversation history.
-// Implementations are provided per IDE (e.g. Windsurf Cascade, Cursor).
+// Implementations are provided per IDE (e.g. Windsurf Cascade).
 type Provider interface {
-	// Name returns the provider identifier, e.g. "cascade" or "cursor".
+	// Name returns the provider identifier, e.g. "cascade".
 	Name() string
 
 	// Discover returns source directories that may contain conversation files.

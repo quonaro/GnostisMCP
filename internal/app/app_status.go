@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/quonaro/gnostis/internal/jobs"
+	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/stats"
 )
@@ -35,8 +37,8 @@ func (a *App) ProgressState() (progress.State, error) {
 	return a.progress.Load()
 }
 
-// ProjectStats returns the current chunk count and last indexed time for each
-// configured project.
+// ProjectStats returns the current chunk count, last indexed time, and
+// indexing configuration for each configured project.
 func (a *App) ProjectStats(ctx context.Context) (map[string]stats.Project, error) {
 	loaded, err := a.indexingStats.Load()
 	if err != nil {
@@ -48,6 +50,8 @@ func (a *App) ProjectStats(ctx context.Context) (map[string]stats.Project, error
 		return map[string]stats.Project{}, nil
 	}
 
+	dirsSnap := a.dirsSnapshot.Load()
+
 	out := make(map[string]stats.Project, len(*snap))
 	for _, p := range *snap {
 		count, err := a.store.CountByProject(ctx, p.ID)
@@ -57,6 +61,18 @@ func (a *App) ProjectStats(ctx context.Context) (map[string]stats.Project, error
 		stat := stats.Project{Path: p.Path, Chunks: count}
 		if s, ok := loaded[p.Name]; ok {
 			stat.LastIndexedAt = s.LastIndexedAt
+			stat.Model = s.Model
+		}
+		if dirsSnap != nil {
+			for _, d := range *dirsSnap {
+				if d.Name == p.Name {
+					stat.Extensions = d.Extensions
+					stat.Include = d.Include
+					stat.Exclude = d.Exclude
+					stat.MaxFileSizeMB = d.MaxFileSizeMB
+					break
+				}
+			}
 		}
 		out[p.Name] = stat
 	}
@@ -68,4 +84,62 @@ func (a *App) FailProgress(err error) {
 	if a.progress != nil {
 		_ = a.progress.Fail(err)
 	}
+}
+
+// MemoryStats returns per-provider memory indexing statistics, or nil if the
+// memory manager is not enabled.
+func (a *App) MemoryStats(ctx context.Context) []memory.ProviderStat {
+	if a.memoryMgr == nil {
+		return nil
+	}
+	return a.memoryMgr.Stats(ctx)
+}
+
+// MemoryProgressState returns the current memory indexing progress, or an idle
+// state if the memory manager is not enabled.
+func (a *App) MemoryProgressState() memory.ProgressState {
+	if a.memoryMgr == nil {
+		return memory.ProgressState{Status: memory.MemStatusIdle}
+	}
+	return a.memoryMgr.ProgressState()
+}
+
+// Jobs returns a snapshot of all jobs in the queue (pending, running, recently completed).
+func (a *App) Jobs() []jobs.Job {
+	if a.jobQueue == nil {
+		return nil
+	}
+	return a.jobQueue.Snapshot()
+}
+
+// MemoryFiles returns metadata for every exported memory file, or nil if the
+// memory manager is not enabled.
+func (a *App) MemoryFiles(ctx context.Context) []memory.FileInfo {
+	if a.memoryMgr == nil {
+		return nil
+	}
+	return a.memoryMgr.ListFiles(ctx)
+}
+
+// MemoryDataDir returns the directory where exported memory files are stored,
+// or an empty string if the memory manager is not enabled.
+func (a *App) MemoryDataDir() string {
+	if a.memoryMgr == nil {
+		return ""
+	}
+	return a.memoryMgr.DataDir()
+}
+
+// ProjectPath returns the filesystem path for a project by name.
+func (a *App) ProjectPath(name string) (string, error) {
+	snap := a.projectsSnapshot.Load()
+	if snap == nil {
+		return "", fmt.Errorf("no projects loaded")
+	}
+	for _, p := range *snap {
+		if p.Name == name {
+			return p.Path, nil
+		}
+	}
+	return "", fmt.Errorf("project %q not found", name)
 }

@@ -6,24 +6,24 @@ Data is stored in `~/.gnostis/data` and logs in `~/.gnostis/gnostis.log` by defa
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `GNOSTIS_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `GNOSTIS_DATA_DIR` | `~/.gnostis/data` | Data directory (vector store, symbol index, etc.) |
-| `GNOSTIS_PROJECTS_DIR` | `~/.gnostis/projects` | Directory containing per-project JSON files |
-| `GNOSTIS_EMBEDDINGS_PROVIDER` | `ollama` | Embedding provider: `ollama` or `openai` |
-| `GNOSTIS_EMBEDDINGS_URL` | `http://localhost:11434/v1` | Embedding API endpoint |
-| `GNOSTIS_EMBEDDINGS_MODEL` | `nomic-embed-text` | Embedding model name |
-| `GNOSTIS_EMBEDDINGS_API_KEY` | _(empty)_ | API key for `openai` provider |
-| `GNOSTIS_EMBEDDINGS_BATCH_SIZE` | `32` | Max texts per embedding request |
-| `GNOSTIS_WEB_ENABLED` | `true` | Enable the web dashboard |
-| `GNOSTIS_WEB_PORT` | `7878` | Web dashboard port |
-| `GNOSTIS_MEMORY_CASCADE_ENABLED` | `false` | Enable Cascade memory indexing |
-| `GNOSTIS_MEMORY_CASCADE_SOURCE_DIRS` | _(auto-detected)_ | Comma-separated list of Cascade trajectory dirs |
-| `GNOSTIS_MEMORY_CASCADE_MIN_MSG_LEN` | `10` | Minimum user message length to index |
-| `GNOSTIS_MEMORY_CURSOR_ENABLED` | `false` | Enable Cursor memory indexing |
-| `GNOSTIS_MEMORY_CURSOR_SOURCE_DIRS` | _(empty)_ | Comma-separated list of Cursor dirs |
-| `GNOSTIS_MEMORY_CURSOR_MIN_MSG_LEN` | `10` | Minimum user message length to index |
+| Variable                             | Default                     | Description                                       |
+| ------------------------------------ | --------------------------- | ------------------------------------------------- |
+| `GNOSTIS_LOG_LEVEL`                  | `info`                      | Log level: `debug`, `info`, `warn`, `error`       |
+| `GNOSTIS_DATA_DIR`                   | `~/.gnostis/data`           | Data directory (vector store, symbol index, etc.) |
+| `GNOSTIS_PROJECTS_DIR`               | `~/.gnostis/projects`       | Directory containing per-project JSON files       |
+| `GNOSTIS_EMBEDDINGS_PROVIDER`        | `ollama`                    | Embedding provider: `ollama` or `openai`          |
+| `GNOSTIS_EMBEDDINGS_URL`             | `http://localhost:11434/v1` | Embedding API endpoint                            |
+| `GNOSTIS_EMBEDDINGS_MODEL`           | `nomic-embed-text`          | Embedding model name                              |
+| `GNOSTIS_EMBEDDINGS_API_KEY`         | _(empty)_                   | API key for `openai` provider                     |
+| `GNOSTIS_EMBEDDINGS_BATCH_SIZE`      | `32`                        | Max texts per embedding request                   |
+| `GNOSTIS_WEB_ENABLED`                | `true`                      | Enable the web dashboard                          |
+| `GNOSTIS_WEB_PORT`                   | `7878`                      | Web dashboard port                                |
+| `GNOSTIS_MEMORY_CASCADE_ENABLED`     | `false`                     | Enable Cascade memory indexing                    |
+| `GNOSTIS_MEMORY_CASCADE_SOURCE_DIRS` | _(auto-detected)_           | Comma-separated list of Cascade trajectory dirs   |
+| `GNOSTIS_MEMORY_CASCADE_MIN_MSG_LEN` | `10`                        | Minimum user message length to index              |
+| `GNOSTIS_MEMORY_CURSOR_ENABLED`      | `false`                     | Enable Cursor memory indexing                     |
+| `GNOSTIS_MEMORY_CURSOR_SOURCE_DIRS`  | _(empty)_                   | Comma-separated list of Cursor dirs               |
+| `GNOSTIS_MEMORY_CURSOR_MIN_MSG_LEN`  | `10`                        | Minimum user message length to index              |
 
 ## Example
 
@@ -86,7 +86,6 @@ Each provider has the same options:
 Supported providers:
 
 - `cascade`: Windsurf/Cascade/Devin Desktop conversation trajectories.
-- `cursor`: placeholder for future Cursor support.
 
 ## Filter precedence
 

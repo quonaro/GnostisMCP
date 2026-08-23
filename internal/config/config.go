@@ -22,10 +22,9 @@ type Embeddings struct {
 // Memory configures chat/dialogue memory providers.
 type Memory struct {
 	Cascade ProviderConfig
-	Cursor  ProviderConfig
 }
 
-// ProviderConfig configures a single memory provider (cascade or cursor).
+// ProviderConfig configures a single memory provider.
 type ProviderConfig struct {
 	Enabled              bool
 	SourceDirs           []string

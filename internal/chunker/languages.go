@@ -14,6 +14,8 @@ type languageHandler struct {
 	name        string
 	lang        *sitter.Language
 	symbolTypes []string
+	calls       callConfig
+	kindOf      kindConfig
 }
 
 // buildHandlers returns the supported language parsers.
@@ -27,6 +29,15 @@ func buildHandlers() map[string]languageHandler {
 				"method_declaration",
 				"type_declaration",
 			},
+			calls: callConfig{
+				callTypes:   []string{"call_expression"},
+				memberTypes: []string{"selector_expression", "scoped_identifier"},
+			},
+			kindOf: kindConfig{
+				"function_declaration": "function",
+				"method_declaration":   "method",
+				"type_declaration":     "type",
+			},
 		},
 		"python": {
 			name: "python",
@@ -34,6 +45,14 @@ func buildHandlers() map[string]languageHandler {
 			symbolTypes: []string{
 				"function_definition",
 				"class_definition",
+			},
+			calls: callConfig{
+				callTypes:   []string{"call"},
+				memberTypes: []string{"attribute"},
+			},
+			kindOf: kindConfig{
+				"function_definition": "function",
+				"class_definition":    "type",
 			},
 		},
 		"javascript": {
@@ -43,6 +62,15 @@ func buildHandlers() map[string]languageHandler {
 				"function_declaration",
 				"class_declaration",
 				"method_definition",
+			},
+			calls: callConfig{
+				callTypes:   []string{"call_expression"},
+				memberTypes: []string{"member_expression"},
+			},
+			kindOf: kindConfig{
+				"function_declaration": "function",
+				"class_declaration":    "type",
+				"method_definition":    "method",
 			},
 		},
 		"typescript": {
@@ -54,6 +82,16 @@ func buildHandlers() map[string]languageHandler {
 				"method_definition",
 				"export_statement",
 			},
+			calls: callConfig{
+				callTypes:   []string{"call_expression"},
+				memberTypes: []string{"member_expression"},
+			},
+			kindOf: kindConfig{
+				"function_declaration": "function",
+				"class_declaration":    "type",
+				"method_definition":    "method",
+				"export_statement":     "function",
+			},
 		},
 		"rust": {
 			name: "rust",
@@ -64,6 +102,17 @@ func buildHandlers() map[string]languageHandler {
 				"trait_item",
 				"struct_item",
 				"enum_item",
+			},
+			calls: callConfig{
+				callTypes:   []string{"call_expression"},
+				memberTypes: []string{"field_expression", "scoped_identifier"},
+			},
+			kindOf: kindConfig{
+				"function_item": "function",
+				"impl_item":     "type",
+				"trait_item":    "type",
+				"struct_item":   "type",
+				"enum_item":     "type",
 			},
 		},
 	}

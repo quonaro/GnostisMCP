@@ -30,6 +30,7 @@ type Manager struct {
 	provider  embeddings.Provider
 	cache     map[string][]float32
 	pending   map[string]struct{}
+	progress  *progressTracker
 }
 
 // NewManager creates a memory manager from configuration.
@@ -41,8 +42,6 @@ func NewManager(cfg config.Memory, dataDir string, provider embeddings.Provider)
 		switch p.Name() {
 		case "cascade":
 			pc = cfg.Cascade
-		case "cursor":
-			pc = cfg.Cursor
 		}
 		providers = append(providers, NewProvider(p, pc))
 	}
@@ -60,6 +59,7 @@ func NewManager(cfg config.Memory, dataDir string, provider embeddings.Provider)
 		provider:  provider,
 		cache:     make(map[string][]float32),
 		pending:   make(map[string]struct{}),
+		progress:  newProgressTracker(),
 	}, nil
 }
 
@@ -168,12 +168,11 @@ func (m *Manager) run(ctx context.Context) {
 }
 
 func (m *Manager) syncAll(ctx context.Context, skip map[string]struct{}) error {
-	var exported int
+	var files []string
 	for _, p := range m.providers {
 		if !p.Enabled() {
 			continue
 		}
-		slog.InfoContext(ctx, "syncing memory provider", "provider", p.Name())
 		for _, src := range p.SourceDirs() {
 			entries, err := os.ReadDir(src)
 			if err != nil {
@@ -192,17 +191,30 @@ func (m *Manager) syncAll(ctx context.Context, skip map[string]struct{}) error {
 				if _, ok := skip[path]; ok {
 					continue
 				}
-				if err := m.exportFile(ctx, path); err != nil {
-					slog.ErrorContext(ctx, "export memory file", "provider", p.Name(), "path", path, "error", err)
-					continue
-				}
-				exported++
+				files = append(files, path)
 			}
 		}
 	}
+
+	m.progress.start(len(files))
+
+	var exported int
+	for i, path := range files {
+		if i%10 == 0 {
+			slog.DebugContext(ctx, "syncing memory", "done", i, "total", len(files))
+		}
+		if err := m.exportFile(ctx, path); err != nil {
+			slog.ErrorContext(ctx, "export memory file", "path", path, "error", err)
+			continue
+		}
+		exported++
+		m.progress.addFiles(1)
+	}
+
 	if exported > 0 {
 		slog.InfoContext(ctx, "memory sync complete", "exported", exported, "chunks", m.Store().Count())
 	}
+	m.progress.done()
 	return nil
 }
 
@@ -224,7 +236,7 @@ func (m *Manager) exportFile(ctx context.Context, path string) error {
 			if err != nil {
 				return fmt.Errorf("export %s: %w", p.Name(), err)
 			}
-			slog.InfoContext(ctx, "memory export", "provider", p.Name(), "source", path, "md", mdPath)
+			slog.DebugContext(ctx, "memory export", "provider", p.Name(), "source", path, "md", mdPath)
 			if err := m.indexer.IndexFile(ctx, p.Name(), mdPath, m.provider, m.cache); err != nil {
 				return fmt.Errorf("index %s: %w", p.Name(), err)
 			}
@@ -254,6 +266,7 @@ func (m *Manager) Rebuild(ctx context.Context) error {
 	}
 
 	if err := m.syncAll(ctx, nil); err != nil {
+		m.progress.fail(err)
 		return fmt.Errorf("sync memory providers: %w", err)
 	}
 
@@ -279,6 +292,42 @@ func (m *Manager) DataDir() string {
 // Providers returns the configured memory providers.
 func (m *Manager) Providers() []*Provider {
 	return m.providers
+}
+
+// ProgressState returns a snapshot of the current memory indexing progress.
+func (m *Manager) ProgressState() ProgressState {
+	return m.progress.snapshot()
+}
+
+// ProviderStat holds per-provider memory indexing statistics.
+type ProviderStat struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	Chunks  int    `json:"chunks"`
+	Files   int    `json:"files"`
+}
+
+// Stats returns per-provider memory indexing statistics.
+func (m *Manager) Stats(ctx context.Context) []ProviderStat {
+	store := m.Store()
+	out := make([]ProviderStat, 0, len(m.providers))
+	for _, p := range m.providers {
+		stat := ProviderStat{
+			Name:    p.Name(),
+			Enabled: p.Enabled(),
+		}
+		if p.Enabled() {
+			count, err := store.CountByProvider(ctx, p.Name())
+			if err != nil {
+				slog.WarnContext(ctx, "count memory chunks for provider", "provider", p.Name(), "error", err)
+			} else {
+				stat.Chunks = count
+			}
+			stat.Files = len(store.Paths())
+		}
+		out = append(out, stat)
+	}
+	return out
 }
 
 // WriteNote writes a user note to the memory data dir and indexes it.

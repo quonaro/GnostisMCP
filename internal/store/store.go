@@ -29,6 +29,7 @@ type VectorStore interface {
 	DeleteByPath(ctx context.Context, path string) error
 	DeleteByPaths(ctx context.Context, paths []string) error
 	GetFileHash(ctx context.Context, path string) (string, error)
+	FileHashes() map[string]string
 	Paths() []string
 	Count() int
 	CountByProject(ctx context.Context, projectID string) (int, error)
@@ -253,6 +254,7 @@ func chunkMetadata(ch chunker.Chunk) map[string]string {
 		"signature":  ch.Signature,
 		"start_line": strconv.Itoa(ch.StartLine),
 		"end_line":   strconv.Itoa(ch.EndLine),
+		"simhash":    strconv.FormatUint(ch.Simhash, 10),
 	}
 }
 
@@ -261,6 +263,17 @@ func (s *Store) GetFileHash(_ context.Context, path string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.hashes[path], nil
+}
+
+// FileHashes returns a copy of all tracked file hashes.
+func (s *Store) FileHashes() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]string, len(s.hashes))
+	for p, h := range s.hashes {
+		out[p] = h
+	}
+	return out
 }
 
 // Paths returns all file paths currently tracked by the store.

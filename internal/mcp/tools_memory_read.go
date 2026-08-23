@@ -23,7 +23,7 @@ type memoryListResult struct {
 func memoryListTool() mcp.Tool {
 	return mcp.NewTool("memory_list",
 		mcp.WithDescription("List indexed memory files."),
-		mcp.WithString("provider", mcp.Description("Memory provider to filter by, e.g. cascade or cursor")),
+		mcp.WithString("provider", mcp.Description("Memory provider to filter by, e.g. cascade")),
 	)
 }
 

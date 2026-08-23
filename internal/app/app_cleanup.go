@@ -13,6 +13,8 @@ func (a *App) cleanupDeletedFiles(ctx context.Context) {
 			slog.InfoContext(ctx, "removing deleted file from index", "path", path)
 			toDelete = append(toDelete, path)
 			a.symbolIndex.RemoveByPath(path)
+			a.callGraph.RemoveByPath(path)
+			a.simhashIndex.RemoveByPath(path)
 		}
 	}
 	_ = a.store.DeleteByPaths(ctx, toDelete)

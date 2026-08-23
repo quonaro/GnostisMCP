@@ -37,7 +37,6 @@ func FromEnv() (Config, error) {
 
 	cfg.Memory = Memory{
 		Cascade: loadProviderConfig("cascade"),
-		Cursor:  loadProviderConfig("cursor"),
 	}
 
 	if err := validate(&cfg); err != nil {
@@ -91,9 +90,6 @@ func validate(cfg *Config) error {
 	}
 
 	if err := validateProvider("memory.cascade", cfg.Memory.Cascade); err != nil {
-		return err
-	}
-	if err := validateProvider("memory.cursor", cfg.Memory.Cursor); err != nil {
 		return err
 	}
 

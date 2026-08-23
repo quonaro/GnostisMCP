@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/stats"
 )
@@ -24,6 +25,7 @@ type indexStatusResult struct {
 	ETA          string                   `json:"eta,omitempty"`
 	ETASeconds   int64                    `json:"eta_seconds,omitempty"`
 	ProjectStats map[string]stats.Project `json:"project_stats"`
+	MemoryStats  []memory.ProviderStat    `json:"memory_stats,omitempty"`
 }
 
 func getIndexStatusTool() mcp.Tool {
@@ -53,6 +55,8 @@ func (s *Server) getIndexStatus(ctx context.Context, request mcp.CallToolRequest
 		return toolError(errReasonSearchFailed, err.Error(), "try again later"), nil
 	}
 
+	memStats := s.indexer.MemoryStats(ctx)
+
 	eta := pstate.ETA()
 	result := indexStatusResult{
 		Projects:     projects,
@@ -62,6 +66,7 @@ func (s *Server) getIndexStatus(ctx context.Context, request mcp.CallToolRequest
 		Symbols:      symbols,
 		Progress:     pstate,
 		ProjectStats: pst,
+		MemoryStats:  memStats,
 	}
 	if eta > 0 {
 		result.ETA = eta.String()

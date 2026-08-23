@@ -3,6 +3,8 @@ package web
 import (
 	"log/slog"
 	"net/http"
+	"os/exec"
+	"runtime"
 )
 
 type rebuildProjectRequest struct {
@@ -147,4 +149,41 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reindexed"})
+}
+
+func (s *Server) handleOpenProject(w http.ResponseWriter, r *http.Request) {
+	var req removeProjectRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	path, err := s.app.ProjectPath(req.Name)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "open project", "name", req.Name, "error", err)
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("explorer", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	if err := cmd.Start(); err != nil {
+		slog.ErrorContext(r.Context(), "open project in explorer", "name", req.Name, "path", path, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to open file manager")
+		return
+	}
+	_ = cmd.Process.Release()
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "opened"})
 }

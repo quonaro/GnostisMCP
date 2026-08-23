@@ -16,12 +16,15 @@ import (
 	"github.com/quonaro/gnostis/internal/config"
 	"github.com/quonaro/gnostis/internal/directory"
 	"github.com/quonaro/gnostis/internal/embeddings"
+	"github.com/quonaro/gnostis/internal/graph"
 	"github.com/quonaro/gnostis/internal/indexer"
+	"github.com/quonaro/gnostis/internal/jobs"
 	mcpServer "github.com/quonaro/gnostis/internal/mcp"
 	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
 	"github.com/quonaro/gnostis/internal/search"
+	"github.com/quonaro/gnostis/internal/simhash"
 	"github.com/quonaro/gnostis/internal/stats"
 	"github.com/quonaro/gnostis/internal/store"
 	"github.com/quonaro/gnostis/internal/symbol"
@@ -40,6 +43,8 @@ type App struct {
 	indexer        *indexer.Indexer
 	chunker        *chunker.Chunker
 	symbolIndex    *symbol.Index
+	callGraph      *graph.Graph
+	simhashIndex   *simhash.Index
 	watcher        *watcher.Watcher
 	memoryMgr      *memory.Manager
 	mcp            *mcpServer.Server
@@ -48,14 +53,20 @@ type App struct {
 	progress       *progress.Progress
 	indexingStats  *stats.Stats
 	ProgressWriter io.Writer
+	jobQueue       *jobs.Queue
 
-	jobMu            sync.Mutex
-	jobRunning       bool
-	currentJobID     string
 	rebuildMu        sync.RWMutex
 	watcherStarted   bool
 	projectsSnapshot atomic.Pointer[[]project.Project]
+	dirsSnapshot     atomic.Pointer[[]directory.Directory]
 	modelName        atomic.Value
+	watcherRestartCh chan struct{}
+
+	changesCacheMu sync.Mutex
+	changesCache   map[string]changesCacheEntry
+
+	layoutCacheMu sync.Mutex
+	layoutCache   map[string]layoutCacheEntry
 }
 
 // New builds the application from configuration.
@@ -86,21 +97,37 @@ func New(cfg config.Config) (*App, error) {
 		return nil, fmt.Errorf("create symbol index: %w", err)
 	}
 
+	callGraph := graph.New()
+	if err := callGraph.Load(filepath.Join(cfg.DataDir, "call_graph.json")); err != nil {
+		return nil, fmt.Errorf("load call graph: %w", err)
+	}
+
+	simhashIndex, err := simhash.NewIndex(filepath.Join(cfg.DataDir, "simhash.json"))
+	if err != nil {
+		return nil, fmt.Errorf("create simhash index: %w", err)
+	}
+
 	embeddingCache := make(map[string][]float32)
 
 	a := &App{
-		cfg:            cfg,
-		dirs:           dirs,
-		projects:       projects,
-		store:          st,
-		provider:       provider,
-		engine:         engine,
-		indexer:        indexer.New(),
-		chunker:        chunker.New(),
-		symbolIndex:    symbolIndex,
-		embeddingCache: embeddingCache,
-		progress:       progress.New(filepath.Join(cfg.DataDir, "indexing-progress.json")),
-		indexingStats:  stats.New(filepath.Join(cfg.DataDir, "project-stats.json")),
+		cfg:              cfg,
+		dirs:             dirs,
+		projects:         projects,
+		store:            st,
+		provider:         provider,
+		engine:           engine,
+		indexer:          indexer.New(),
+		chunker:          chunker.New(),
+		symbolIndex:      symbolIndex,
+		callGraph:        callGraph,
+		simhashIndex:     simhashIndex,
+		embeddingCache:   embeddingCache,
+		progress:         progress.New(filepath.Join(cfg.DataDir, "indexing-progress.json")),
+		indexingStats:    stats.New(filepath.Join(cfg.DataDir, "project-stats.json")),
+		jobQueue:         jobs.New(20),
+		watcherRestartCh: make(chan struct{}, 1),
+		changesCache:     make(map[string]changesCacheEntry),
+		layoutCache:      make(map[string]layoutCacheEntry),
 	}
 	a.updateSnapshots(cfg, projects)
 
@@ -129,7 +156,7 @@ func New(cfg config.Config) (*App, error) {
 }
 
 func memoryEnabled(cfg config.Memory) bool {
-	return cfg.Cascade.Enabled || cfg.Cursor.Enabled
+	return cfg.Cascade.Enabled
 }
 
 // updateSnapshots updates the lock-free copies used by status/read-only APIs.
@@ -137,6 +164,10 @@ func memoryEnabled(cfg config.Memory) bool {
 func (a *App) updateSnapshots(cfg config.Config, projects []project.Project) {
 	snapshot := append([]project.Project(nil), projects...)
 	a.projectsSnapshot.Store(&snapshot)
+
+	dirsSnap := append([]directory.Directory(nil), a.dirs...)
+	a.dirsSnapshot.Store(&dirsSnap)
+
 	a.modelName.Store(cfg.Embeddings.Model)
 }
 
@@ -147,6 +178,9 @@ func (a *App) Run(ctx context.Context) error {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	go a.runWatcherRestarter(ctx)
+	go a.jobQueue.Start(ctx)
 
 	errCh := make(chan error, 3)
 	var wg sync.WaitGroup
@@ -242,7 +276,7 @@ func (a *App) initialIndex(ctx context.Context) error {
 	var firstErr error
 	for i, dir := range a.dirs {
 		slog.InfoContext(ctx, "indexing directory", "path", dir.Path, "project", a.projects[i].Name)
-		if err := indexDirectoryWithRetry(ctx, a.ProgressWriter, dir, a.projects[i], a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.embeddingCache, a.progress, a.indexingStats); err != nil {
+		if err := indexDirectoryWithRetry(ctx, a.ProgressWriter, dir, a.projects[i], a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.callGraph, a.simhashIndex, a.embeddingCache, a.progress, a.indexingStats); err != nil {
 			slog.ErrorContext(ctx, "index project failed, continuing to next", "project", a.projects[i].Name, "error", err)
 			if firstErr == nil {
 				firstErr = fmt.Errorf("index %s: %w", dir.Path, err)
@@ -253,6 +287,8 @@ func (a *App) initialIndex(ctx context.Context) error {
 	if err := a.symbolIndex.Save(); err != nil {
 		slog.ErrorContext(ctx, "save symbol index", "error", err)
 	}
+	a.saveCallGraph()
+	a.saveSimhashIndex()
 	slog.InfoContext(ctx, "initial index complete", "chunks", a.store.Count())
 	return firstErr
 }

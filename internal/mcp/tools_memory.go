@@ -32,7 +32,7 @@ func memorySearchTool() mcp.Tool {
 	return mcp.NewTool("memory_search",
 		mcp.WithDescription("Semantic search over indexed memory (chat dialogues and saved notes)."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Natural language search query")),
-		mcp.WithString("provider", mcp.Description("Memory provider to restrict the search, e.g. cascade or cursor")),
+		mcp.WithString("provider", mcp.Description("Memory provider to restrict the search, e.g. cascade")),
 		mcp.WithNumber("top_k", mcp.Description("Number of results"), mcp.DefaultNumber(10)),
 	)
 }

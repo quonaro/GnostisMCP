@@ -11,7 +11,7 @@ func TestStatsUpdateAndLoad(t *testing.T) {
 	path := filepath.Join(dir, "stats.json")
 	s := New(path)
 
-	if err := s.Update("foo", 42); err != nil {
+	if err := s.Update("foo", 42, "nomic-embed-text"); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
 
@@ -51,12 +51,12 @@ func TestStatsUpdateOverwrites(t *testing.T) {
 	path := filepath.Join(dir, "stats.json")
 	s := New(path)
 
-	_ = s.Update("foo", 10)
+	_ = s.Update("foo", 10, "nomic-embed-text")
 	before, _ := s.Load()
 	first := before["foo"].LastIndexedAt
 
 	time.Sleep(10 * time.Millisecond)
-	_ = s.Update("foo", 20)
+	_ = s.Update("foo", 20, "text-embedding-3-small")
 	after, _ := s.Load()
 	second := after["foo"].LastIndexedAt
 

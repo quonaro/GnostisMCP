@@ -13,10 +13,12 @@
     "@tailwindcss/vite": "^4.0.0",
     "svelte": "^5.0.0",
     "tailwindcss": "^4.0.0",
+    "@types/d3-force": "^3.0.10",
     "typescript": "^5.7.0",
     "vite": "^6.0.0"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.33.0"
+    "@lucide/svelte": "^1.33.0",
+    "d3-force": "^3.0.0"
   }
 }

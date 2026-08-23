@@ -9,10 +9,13 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/quonaro/gnostis/internal/coverage"
+	"github.com/quonaro/gnostis/internal/graph"
 	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
 	"github.com/quonaro/gnostis/internal/search"
+	"github.com/quonaro/gnostis/internal/simhash"
 	"github.com/quonaro/gnostis/internal/stats"
 	"github.com/quonaro/gnostis/internal/symbol"
 )
@@ -34,12 +37,21 @@ type Indexer interface {
 	Info() (provider, model string, symbols int)
 	ProgressState() (progress.State, error)
 	ProjectStats(ctx context.Context) (map[string]stats.Project, error)
+	MemoryStats(ctx context.Context) []memory.ProviderStat
+	MemoryProgressState() memory.ProgressState
+	ProjectPath(name string) (string, error)
 	ReindexFiles(ctx context.Context, paths []string) error
 	StartRebuildProject(ctx context.Context, name string) (string, error)
 	StartRebuildIndex(ctx context.Context) (string, error)
 	AddProject(ctx context.Context, path, name string, extensions, include, exclude []string, maxFileSizeMB int) (string, error)
 	EditProject(ctx context.Context, name string, extensions, include, exclude []string, maxFileSizeMB int) error
 	RemoveProject(ctx context.Context, name string) error
+	CheckCoverage(ctx context.Context, paths []string) []coverage.Status
+	DetectChanges(ctx context.Context, project string) ([]coverage.Change, error)
+	TracePath(ctx context.Context, from, to, project string, maxDepth int) (graph.TraceResult, error)
+	DeadCode(ctx context.Context, project, kind string, topK int) ([]graph.DeadCodeCandidate, error)
+	Architecture(ctx context.Context, project string) (*graph.Architecture, error)
+	FindSimilar(ctx context.Context, path, project string, threshold float64, topK int) ([]simhash.FileMatch, error)
 }
 
 const serverName = "gnostis"
@@ -148,6 +160,12 @@ func (s *Server) registerTools() {
 	s.server.AddTool(memoryListTool(), mcp.NewTypedToolHandler(s.memoryList))
 	s.server.AddTool(memoryReadTool(), mcp.NewTypedToolHandler(s.memoryRead))
 	s.server.AddTool(rebuildMemoryTool(), mcp.NewTypedToolHandler(s.rebuildMemory))
+	s.server.AddTool(checkIndexCoverageTool(), mcp.NewTypedToolHandler(s.checkIndexCoverage))
+	s.server.AddTool(detectChangesTool(), mcp.NewTypedToolHandler(s.detectChanges))
+	s.server.AddTool(tracePathTool(), mcp.NewTypedToolHandler(s.tracePath))
+	s.server.AddTool(deadCodeTool(), mcp.NewTypedToolHandler(s.deadCode))
+	s.server.AddTool(getArchitectureTool(), mcp.NewTypedToolHandler(s.getArchitecture))
+	s.server.AddTool(findSimilarTool(), mcp.NewTypedToolHandler(s.findSimilar))
 }
 
 func searchCodebaseTool() mcp.Tool {

@@ -1,16 +1,19 @@
 <script lang="ts">
-  import { progress, status, pushToast } from '../lib/stores'
-  import { rebuildIndex } from '../lib/api'
-  import { refreshStatus } from '../lib/stores'
+  import { progress, status } from '../lib/stores'
   import Card from './ui/Card.svelte'
-  import Button from './ui/Button.svelte'
   import Badge from './ui/Badge.svelte'
-  import { RefreshCw, AlertCircle, Clock } from '@lucide/svelte'
+  import { AlertCircle, Clock } from '@lucide/svelte'
 
   let p = $derived($progress)
   let s = $derived($status)
 
-  let pct = $derived(
+  let filePct = $derived(
+    p && p.total_files > 0
+      ? Math.round((p.done_files / p.total_files) * 100)
+      : 0,
+  )
+
+  let chunkPct = $derived(
     p && p.total_chunks > 0
       ? Math.round((p.done_chunks / p.total_chunks) * 100)
       : 0,
@@ -20,20 +23,8 @@
   let isError = $derived(p?.status === 'error')
   let isDone = $derived(p?.status === 'done')
 
-  let busy = $state(false)
-
-  async function handleRebuildAll() {
-    busy = true
-    try {
-      await rebuildIndex()
-      await refreshStatus()
-      pushToast('success', 'Index rebuild started')
-    } catch (e) {
-      pushToast('error', String(e))
-    } finally {
-      busy = false
-    }
-  }
+  let isChunking = $derived(p?.phase === 'chunking')
+  let isEmbedding = $derived(p?.phase === 'embedding')
 
   function formatETA(seconds: number): string {
     if (seconds <= 0) return '—'
@@ -47,10 +38,6 @@
 <Card class="p-4">
   <div class="flex items-center justify-between mb-3">
     <h2 class="text-sm font-semibold text-muted-foreground uppercase">Indexing Progress</h2>
-    <Button variant="default" size="sm" onclick={handleRebuildAll} disabled={busy || isRunning}>
-      <RefreshCw class="w-3.5 h-3.5" />
-      {busy ? 'Starting...' : 'Rebuild All'}
-    </Button>
   </div>
 
   {#if isError && p?.error}
@@ -75,15 +62,48 @@
     </div>
 
     {#if isRunning || isDone}
-      <div class="w-full bg-secondary rounded-full h-2 mb-1.5 overflow-hidden">
-        <div
-          class="h-full rounded-full transition-all duration-500 {isDone ? 'bg-success' : 'bg-primary'}"
-          style="width: {pct}%"
-        ></div>
-      </div>
-      <div class="flex justify-between items-center text-xs text-muted-foreground">
-        <span>{p.done_chunks.toLocaleString()} / {p.total_chunks.toLocaleString()} chunks</span>
-        <span class="font-medium text-foreground">{pct}%</span>
+      <!-- File progress (chunking phase) -->
+      {#if p.total_files > 0}
+        <div class="mb-2">
+          <div class="flex justify-between items-center text-xs text-muted-foreground mb-1">
+            <span>Files</span>
+            <span>{p.done_files.toLocaleString()} / {p.total_files.toLocaleString()}</span>
+          </div>
+          <div class="w-full bg-secondary rounded-full h-2 overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all duration-500 {isDone ? 'bg-success' : 'bg-primary'}"
+              style="width: {filePct}%"
+            ></div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- Chunk progress (embedding phase) -->
+      {#if p.total_chunks > 0}
+        <div class="mb-1.5">
+          <div class="flex justify-between items-center text-xs text-muted-foreground mb-1">
+            <span>Chunks</span>
+            <span>{p.done_chunks.toLocaleString()} / {p.total_chunks.toLocaleString()}</span>
+          </div>
+          <div class="w-full bg-secondary rounded-full h-2 overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all duration-500 {isDone ? 'bg-success' : 'bg-primary'}"
+              style="width: {chunkPct}%"
+            ></div>
+          </div>
+        </div>
+      {/if}
+
+      <div class="flex justify-between items-center text-xs text-muted-foreground mt-1">
+        <span class="font-medium text-foreground">
+          {#if isChunking && p.total_files > 0}
+            {filePct}% files
+          {:else if isEmbedding && p.total_chunks > 0}
+            {chunkPct}% chunks
+          {:else if isDone}
+            Done
+          {/if}
+        </span>
         {#if s?.eta_seconds && s.eta_seconds > 0}
           <span class="flex items-center gap-1">
             <Clock class="w-3 h-3" />

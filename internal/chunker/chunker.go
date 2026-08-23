@@ -11,7 +11,14 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 
 	"github.com/quonaro/gnostis/internal/indexer"
+	"github.com/quonaro/gnostis/internal/simhash"
 )
+
+// CallRef is a single outgoing call from a symbol.
+type CallRef struct {
+	Name string `json:"name"` // callee name as written (e.g. "Println", not "fmt.Println")
+	Line int    `json:"line"`
+}
 
 // Chunk represents a single indexed symbol or document section.
 type Chunk struct {
@@ -26,6 +33,9 @@ type Chunk struct {
 	Content   string
 	StartLine int
 	EndLine   int
+	Kind      string    // function | method | type | document | file
+	Calls     []CallRef // outgoing calls found inside this chunk
+	Simhash   uint64    // 64-bit simhash fingerprint of Content
 }
 
 // Chunker splits files into symbol-level chunks.
@@ -81,7 +91,7 @@ func (c *Chunker) collectSymbols(chunks *[]Chunk, file indexer.FileInfo, handler
 	}
 
 	if isSymbolNode(node, handler.symbolTypes) {
-		chunk := c.buildChunk(file, handler.name, node, content)
+		chunk := c.buildChunk(file, handler, node, content)
 		*chunks = append(*chunks, chunk)
 		return
 	}
@@ -91,7 +101,7 @@ func (c *Chunker) collectSymbols(chunks *[]Chunk, file indexer.FileInfo, handler
 	}
 }
 
-func (c *Chunker) buildChunk(file indexer.FileInfo, lang string, node *sitter.Node, content []byte) Chunk {
+func (c *Chunker) buildChunk(file indexer.FileInfo, handler languageHandler, node *sitter.Node, content []byte) Chunk {
 	text := string(node.Content(content))
 	lines := strings.Split(text, "\n")
 	firstLine := text
@@ -109,12 +119,15 @@ func (c *Chunker) buildChunk(file indexer.FileInfo, lang string, node *sitter.No
 		ProjectID: file.ProjectID,
 		Path:      file.Path,
 		FileHash:  file.Hash,
-		Language:  lang,
+		Language:  handler.name,
 		Symbol:    symbol,
 		Signature: firstLine,
 		Content:   text,
 		StartLine: int(node.StartPoint().Row) + 1,
 		EndLine:   int(node.EndPoint().Row) + 1,
+		Kind:      handler.kindOf[node.Type()],
+		Calls:     walkCalls(node, content, handler.calls),
+		Simhash:   simhash.Fingerprint(text),
 	}
 }
 
@@ -146,6 +159,9 @@ func (c *Chunker) chunkMarkdown(file indexer.FileInfo) []Chunk {
 			Content:   section,
 			StartLine: strings.Count(file.Content[:start], "\n") + 1,
 			EndLine:   strings.Count(file.Content[:end], "\n") + 1,
+			Kind:      "document",
+			Calls:     []CallRef{},
+			Simhash:   simhash.Fingerprint(section),
 		})
 	}
 
@@ -169,10 +185,18 @@ func (c *Chunker) wholeFileChunk(file indexer.FileInfo, lang string) Chunk {
 		Content:   file.Content,
 		StartLine: 1,
 		EndLine:   len(lines),
+		Kind:      "file",
+		Calls:     []CallRef{},
+		Simhash:   simhash.Fingerprint(file.Content),
 	}
 }
 
 func detectLanguage(path string) string {
+	return DetectLanguage(path)
+}
+
+// DetectLanguage returns the language name for a file path, or "" if unknown.
+func DetectLanguage(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".go":

@@ -96,7 +96,12 @@ func (idx *Indexer) Index(ctx context.Context, dir directory.Directory, proj pro
 	return files, nil
 }
 
-func hashContent(data []byte) string {
+// HashContent computes the SHA-256 hash of data as a hex string.
+func HashContent(data []byte) string {
 	sum := sha256.Sum256(data)
 	return fmt.Sprintf("%x", sum)
+}
+
+func hashContent(data []byte) string {
+	return HashContent(data)
 }

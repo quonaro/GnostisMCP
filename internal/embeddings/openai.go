@@ -94,8 +94,6 @@ func (p *openAICompatible) embedBatch(ctx context.Context, texts []string) ([][]
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	slog.DebugContext(ctx, "sending embeddings request", "url", p.url+"/embeddings", "model", p.model, "body_bytes", len(jsonBody), "body", truncateForDebug(string(jsonBody), debugBodyMaxLen))
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.url+"/embeddings", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -116,8 +114,6 @@ func (p *openAICompatible) embedBatch(ctx context.Context, texts []string) ([][]
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
-
-	slog.DebugContext(ctx, "embeddings response received", "status", resp.StatusCode, "body_bytes", len(respBody), "body", truncateForDebug(string(respBody), debugBodyMaxLen))
 
 	if resp.StatusCode != http.StatusOK {
 		slog.ErrorContext(ctx, "embeddings request failed", "status", resp.StatusCode, "body", string(respBody))

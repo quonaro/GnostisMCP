@@ -9,8 +9,12 @@ import (
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/quonaro/gnostis/internal/coverage"
+	"github.com/quonaro/gnostis/internal/graph"
+	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
+	"github.com/quonaro/gnostis/internal/simhash"
 	"github.com/quonaro/gnostis/internal/stats"
 )
 
@@ -31,6 +35,12 @@ func (m *mockIndexer) ProgressState() (progress.State, error) {
 func (m *mockIndexer) ProjectStats(context.Context) (map[string]stats.Project, error) {
 	return nil, nil
 }
+func (m *mockIndexer) MemoryStats(context.Context) []memory.ProviderStat {
+	return nil
+}
+func (m *mockIndexer) MemoryProgressState() memory.ProgressState {
+	return memory.ProgressState{Status: memory.MemStatusIdle}
+}
 func (m *mockIndexer) StartRebuildProject(context.Context, string) (string, error) {
 	return "job-1", nil
 }
@@ -42,10 +52,35 @@ func (m *mockIndexer) EditProject(context.Context, string, []string, []string, [
 	return nil
 }
 func (m *mockIndexer) RemoveProject(context.Context, string) error { return nil }
+func (m *mockIndexer) ProjectPath(name string) (string, error)     { return "/tmp/" + name, nil }
 
 func (m *mockIndexer) ReindexFiles(ctx context.Context, paths []string) error {
 	m.paths = append(m.paths, paths...)
 	return m.err
+}
+
+func (m *mockIndexer) CheckCoverage(_ context.Context, paths []string) []coverage.Status {
+	return nil
+}
+
+func (m *mockIndexer) DetectChanges(_ context.Context, project string) ([]coverage.Change, error) {
+	return nil, nil
+}
+
+func (m *mockIndexer) TracePath(_ context.Context, from, to, project string, maxDepth int) (graph.TraceResult, error) {
+	return graph.TraceResult{}, nil
+}
+
+func (m *mockIndexer) DeadCode(_ context.Context, project, kind string, topK int) ([]graph.DeadCodeCandidate, error) {
+	return nil, nil
+}
+
+func (m *mockIndexer) Architecture(_ context.Context, project string) (*graph.Architecture, error) {
+	return nil, nil
+}
+
+func (m *mockIndexer) FindSimilar(_ context.Context, path, project string, threshold float64, topK int) ([]simhash.FileMatch, error) {
+	return nil, nil
 }
 
 func TestReindexFiles_NoPaths(t *testing.T) {
