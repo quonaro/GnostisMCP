@@ -47,13 +47,16 @@ push:
     lota build
 
     echo "==> Running pre-commit checks..."
-    pre-commit run --all-files
+    pre-commit run --all-files || true
 
     if [ -n "$(git status --porcelain)" ]; then
       echo "==> Committing changes from build and lint..."
       git add -A
       git commit -m "chore: pre-push build and lint fixes"
     fi
+
+    echo "==> Verifying pre-commit passes clean..."
+    pre-commit run --all-files
 
     if [ -n "${tag:-}" ]; then
       git tag -f "$tag"
