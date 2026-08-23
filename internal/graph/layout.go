@@ -73,11 +73,11 @@ func ComputeLayout(nodes []Node, edges []ResolvedEdge) (map[string][2]float64, e
 	// Configure force stack with parameters tuned for code graph visualization.
 	const (
 		seed          uint64  = 42
-		updates       uint    = 300
+		updates       uint    = 500
 		stepSize      float64 = 0.01
 		coolingRate   float64 = 0.1
 		stopThreshold float64 = 0.5
-		optimalDist   float64 = 10.0
+		optimalDist   float64 = 30.0
 		repulsion     float64 = 10.0
 		repulsionExp  uint    = 3
 		attractionExp float64 = 1.0

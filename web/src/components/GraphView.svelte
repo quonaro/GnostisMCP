@@ -73,9 +73,37 @@
       .map((e) => ({ s: nodeById.get(e.from)!, t: nodeById.get(e.to)! }))
 
     highlightSet = null
-    scale = 1
-    offsetX = 0
-    offsetY = 0
+    fitToCanvas()
+  }
+
+  function fitToCanvas() {
+    if (!canvasEl || nodes.length === 0) {
+      scale = 1
+      offsetX = 0
+      offsetY = 0
+      requestRender()
+      return
+    }
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (const n of nodes) {
+      if (n.x < minX) minX = n.x
+      if (n.x > maxX) maxX = n.x
+      if (n.y < minY) minY = n.y
+      if (n.y > maxY) maxY = n.y
+    }
+    const graphW = maxX - minX || 1
+    const graphH = maxY - minY || 1
+    const w = canvasEl.clientWidth || 800
+    const h = canvasEl.clientHeight || 600
+    const padding = 60
+    const fitScale = Math.min(
+      (w - padding * 2) / graphW,
+      (h - padding * 2) / graphH,
+      10
+    )
+    scale = Math.max(0.1, fitScale)
+    offsetX = w / 2 - (minX + graphW / 2) * scale
+    offsetY = h / 2 - (minY + graphH / 2) * scale
     requestRender()
   }
 
@@ -393,6 +421,13 @@
         title="Toggle isolated nodes (degree 0)"
       >
         {hideIsolated ? 'Connected only' : 'Show all'}
+      </button>
+      <button
+        onclick={fitToCanvas}
+        class="px-2 py-1 text-xs rounded bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+        title="Fit graph to canvas"
+      >
+        Fit
       </button>
       <button
         onclick={loadGraph}

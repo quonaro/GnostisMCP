@@ -306,6 +306,13 @@ func (a *App) initialIndex(ctx context.Context) error {
 		_ = a.progress.Reset()
 	}
 
+	if state, err := a.progress.Load(); err == nil && state.Status == progress.StatusDone {
+		if a.isIndexUpToDate(ctx, state.UpdatedAt) {
+			slog.InfoContext(ctx, "index already up to date, skipping", "chunks", a.store.Count())
+			return nil
+		}
+	}
+
 	a.cleanupDeletedFiles(ctx)
 	var firstErr error
 	for i, dir := range a.dirs {
