@@ -4,100 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
-
-	"github.com/quonaro/gnostis/internal/config"
 	"github.com/quonaro/gnostis/internal/watcher"
 )
-
-// watchConfig watches the projects directory for changes and reloads
-// the configuration.
-func (a *App) watchConfig(ctx context.Context) error {
-	projectsDir := a.cfg.ProjectsDirPath
-	if projectsDir == "" {
-		return nil
-	}
-
-	fw, err := fsnotify.NewWatcher()
-	if err != nil {
-		return fmt.Errorf("create config watcher: %w", err)
-	}
-	defer func() { _ = fw.Close() }()
-
-	// Best-effort: watch the projects directory if it exists.
-	if _, statErr := os.Stat(projectsDir); statErr == nil {
-		if err := fw.Add(projectsDir); err != nil {
-			slog.WarnContext(ctx, "watch projects directory", "dir", projectsDir, "error", err)
-		}
-	} else {
-		if mkErr := os.MkdirAll(projectsDir, 0o755); mkErr == nil {
-			if err := fw.Add(projectsDir); err != nil {
-				slog.WarnContext(ctx, "watch projects directory", "dir", projectsDir, "error", err)
-			}
-		}
-	}
-
-	slog.InfoContext(ctx, "watching projects directory", "dir", projectsDir)
-
-	var debounce *time.Timer
-	reset := func() {
-		if debounce != nil {
-			if !debounce.Stop() {
-				select {
-				case <-debounce.C:
-				default:
-				}
-			}
-		}
-		debounce = time.NewTimer(200 * time.Millisecond)
-	}
-	defer func() {
-		if debounce != nil {
-			debounce.Stop()
-		}
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case event, ok := <-fw.Events:
-			if !ok {
-				return nil
-			}
-			// React to project JSON file changes in the projects directory.
-			if filepath.Dir(event.Name) == projectsDir && strings.HasSuffix(event.Name, ".json") {
-				if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 && event.Op&fsnotify.Remove == 0 && event.Op&fsnotify.Rename == 0 {
-					continue
-				}
-				reset()
-				continue
-			}
-		case <-func() <-chan time.Time {
-			if debounce == nil {
-				return nil
-			}
-			return debounce.C
-		}():
-			if err := a.ReloadConfig(ctx); err != nil {
-				slog.ErrorContext(ctx, "reload config", "error", err)
-			} else {
-				slog.InfoContext(ctx, "config reloaded")
-			}
-			debounce = nil
-		case err, ok := <-fw.Errors:
-			if !ok {
-				return nil
-			}
-			slog.ErrorContext(ctx, "config watcher error", "error", err)
-		}
-	}
-}
 
 // newWatcher creates a fresh filesystem watcher with the current directory list.
 func (a *App) newWatcher() *watcher.Watcher {
@@ -189,38 +100,4 @@ func (a *App) runWatcherRestarter(ctx context.Context) {
 			a.rebuildMu.Unlock()
 		}
 	}
-}
-
-// ReloadConfig reloads the configuration from env and updates the project list.
-func (a *App) ReloadConfig(ctx context.Context) error {
-	cfg, err := config.FromEnv()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	// Preserve runtime settings that cannot be changed without a restart.
-	cfg.DataDir = a.cfg.DataDir
-	cfg.Embeddings = a.cfg.Embeddings
-	cfg.ProjectsDirPath = a.cfg.ProjectsDirPath
-
-	dirs, projects, err := resolveProjects(a.sqlDB)
-	if err != nil {
-		return fmt.Errorf("resolve projects: %w", err)
-	}
-
-	a.rebuildMu.Lock()
-	defer a.rebuildMu.Unlock()
-
-	a.cfg = cfg
-	a.dirs = dirs
-	a.projects = projects
-	a.updateSnapshots(cfg, projects)
-
-	if a.mcp != nil {
-		a.mcp.ReloadProjects(projects)
-	}
-
-	a.scheduleWatcherRestart()
-
-	return nil
 }

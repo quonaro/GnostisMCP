@@ -2,11 +2,10 @@ package config
 
 // Config holds the complete application configuration loaded from environment variables.
 type Config struct {
-	LogLevel        string
-	DataDir         string
-	ProjectsDirPath string
-	Embeddings      Embeddings
-	Web             Web
+	LogLevel   string
+	DataDir    string
+	Embeddings Embeddings
+	Web        Web
 }
 
 // Embeddings configures the OpenAI-compatible embedding endpoint.
@@ -34,13 +33,11 @@ type Directory struct {
 }
 
 const (
-	defaultLogLevel      = "info"
-	defaultDataDir       = "${HOME}/.gnostis/data"
-	DefaultProjectsDir   = "${HOME}/.gnostis/projects"
-	DefaultMemoryDataDir = "${HOME}/.gnostis/data/memory"
-	defaultURL           = "http://localhost:7997/v1"
-	defaultModel         = "BAAI/bge-small-en-v1.5"
-	defaultBatchSize     = 32
-	defaultMaxChars      = 8000
-	defaultWebPort       = 7878
+	defaultLogLevel  = "info"
+	defaultDataDir   = "${HOME}/.gnostis/data"
+	defaultURL       = "http://localhost:7997/v1"
+	defaultModel     = "BAAI/bge-small-en-v1.5"
+	defaultBatchSize = 32
+	defaultMaxChars  = 8000
+	defaultWebPort   = 7878
 )

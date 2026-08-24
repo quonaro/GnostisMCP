@@ -15,9 +15,8 @@ var envPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\
 // FromEnv reads all configuration from environment variables and applies defaults.
 func FromEnv() (Config, error) {
 	cfg := Config{
-		LogLevel:        envOr("GS_LOG_LEVEL", defaultLogLevel),
-		DataDir:         envOr("GS_DATA_DIR", InterpolateEnv(defaultDataDir)),
-		ProjectsDirPath: envOr("GS_PROJECTS_DIR", InterpolateEnv(DefaultProjectsDir)),
+		LogLevel: envOr("GS_LOG_LEVEL", defaultLogLevel),
+		DataDir:  envOr("GS_DATA_DIR", InterpolateEnv(defaultDataDir)),
 		Embeddings: Embeddings{
 			URL:       envOr("GS_EMBEDDINGS_URL", defaultURL),
 			Model:     envOr("GS_EMBEDDINGS_MODEL", defaultModel),
@@ -32,7 +31,6 @@ func FromEnv() (Config, error) {
 
 	cfg.LogLevel = strings.ToLower(cfg.LogLevel)
 	cfg.DataDir = filepath.Clean(cfg.DataDir)
-	cfg.ProjectsDirPath = filepath.Clean(cfg.ProjectsDirPath)
 
 	if err := validate(&cfg); err != nil {
 		return Config{}, fmt.Errorf("validate config: %w", err)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/quonaro/gnostis/internal/jobs"
-	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/stats"
 )
@@ -92,16 +91,6 @@ func (a *App) Jobs() []jobs.Job {
 		return nil
 	}
 	return a.jobQueue.Snapshot()
-}
-
-// MemoryFiles returns metadata for every memory file.
-func (a *App) MemoryFiles(ctx context.Context) []memory.FileInfo {
-	return a.memoryMgr.ListFiles(ctx)
-}
-
-// MemoryDataDir returns the directory where memory files are stored.
-func (a *App) MemoryDataDir() string {
-	return a.memoryMgr.DataDir()
 }
 
 // ProjectPath returns the filesystem path for a project by name.

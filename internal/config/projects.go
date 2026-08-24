@@ -4,20 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	"github.com/quonaro/gnostis/internal/db"
 )
-
-// ProjectsDirName is the subdirectory inside the config directory that holds
-// individual project JSON files.
-const ProjectsDirName = "projects"
-
-// ProjectsDir returns the path to the projects directory next to the config
-// file. The config file path must be resolved (absolute).
-func ProjectsDir(configPath string) string {
-	return filepath.Join(filepath.Dir(configPath), ProjectsDirName)
-}
 
 // LoadProjectFiles reads all projects from the SQLite database and returns
 // them as Directory entries. An empty database yields an empty slice.

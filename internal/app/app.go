@@ -21,7 +21,6 @@ import (
 	"github.com/quonaro/gnostis/internal/indexer"
 	"github.com/quonaro/gnostis/internal/jobs"
 	mcpServer "github.com/quonaro/gnostis/internal/mcp"
-	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
 	"github.com/quonaro/gnostis/internal/search"
@@ -48,7 +47,6 @@ type App struct {
 	callGraph      *graph.Graph
 	simhashIndex   *simhash.Index
 	watcher        *watcher.Watcher
-	memoryMgr      *memory.Manager
 	mcp            *mcpServer.Server
 	webSrv         *web.Server
 	embeddingCache map[string][]float32
@@ -145,18 +143,6 @@ func New(cfg config.Config) (*App, error) {
 	}
 	a.updateSnapshots(cfg, projects)
 
-	dataDir := config.InterpolateEnv(config.DefaultMemoryDataDir)
-	mgr, err := memory.NewManager(dataDir, provider, sqlDB)
-	if err != nil {
-		_ = sqlDB.Close()
-		return nil, fmt.Errorf("create memory manager: %w", err)
-	}
-	if err := mgr.Start(context.Background()); err != nil {
-		_ = sqlDB.Close()
-		return nil, fmt.Errorf("start memory manager: %w", err)
-	}
-	a.memoryMgr = mgr
-
 	mcpSrv := mcpServer.New(engine, symbolIndex, a, projects)
 
 	a.mcp = mcpSrv
@@ -191,7 +177,7 @@ func (a *App) Run(ctx context.Context) error {
 	go a.runWatcherRestarter(ctx)
 	go a.jobQueue.Start(ctx)
 
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 2)
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -231,16 +217,6 @@ func (a *App) Run(ctx context.Context) error {
 		a.rebuildMu.Unlock()
 		<-ctx.Done()
 		_ = a.watcher.Stop()
-		_ = a.memoryMgr.Stop()
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := a.watchConfig(ctx); err != nil && err != context.Canceled {
-			errCh <- fmt.Errorf("config watcher: %w", err)
-			cancel()
-		}
 	}()
 
 	wg.Add(1)
