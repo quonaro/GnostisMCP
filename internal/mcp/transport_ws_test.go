@@ -12,7 +12,7 @@ import (
 )
 
 func TestWSHandler_ToolCallRoundTrip(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	handler := srv.WSHandler(nil)
 
 	ts := httptest.NewServer(handler)
@@ -76,7 +76,7 @@ func TestWSHandler_ToolCallRoundTrip(t *testing.T) {
 }
 
 func TestWSHandler_DashboardMethod(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 
 	// Register a custom dashboard handler
 	called := false
@@ -149,7 +149,7 @@ func TestWSHandler_DashboardMethod(t *testing.T) {
 }
 
 func TestWSHandler_Notification(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	handler := srv.WSHandler(nil)
 
 	ts := httptest.NewServer(handler)

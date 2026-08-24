@@ -18,11 +18,15 @@ type openAICompatible struct {
 	model     string
 	apiKey    string
 	batchSize int
+	maxChars  int
 }
 
-func newOpenAICompatible(url, model, apiKey string, batchSize int) *openAICompatible {
+func newOpenAICompatible(url, model, apiKey string, batchSize, maxChars int) *openAICompatible {
 	if batchSize <= 0 {
 		batchSize = 32
+	}
+	if maxChars <= 0 {
+		maxChars = 8000
 	}
 	return &openAICompatible{
 		client:    &http.Client{Timeout: 120 * time.Second},
@@ -30,6 +34,7 @@ func newOpenAICompatible(url, model, apiKey string, batchSize int) *openAICompat
 		model:     model,
 		apiKey:    apiKey,
 		batchSize: batchSize,
+		maxChars:  maxChars,
 	}
 }
 
@@ -42,11 +47,7 @@ func (p *openAICompatible) BatchSize() int {
 }
 
 func (p *openAICompatible) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	batches := (len(texts) + p.batchSize - 1) / p.batchSize
-	if batches < 1 {
-		batches = 1
-	}
-	slog.DebugContext(ctx, "embedding texts", "count", len(texts), "batches", batches, "batch_size", p.batchSize, "model", p.model, "url", p.url)
+	slog.InfoContext(ctx, "embedding", "count", len(texts), "model", p.model)
 	var all [][]float32
 
 	for i := 0; i < len(texts); i += p.batchSize {
@@ -54,9 +55,6 @@ func (p *openAICompatible) Embed(ctx context.Context, texts []string) ([][]float
 		if end > len(texts) {
 			end = len(texts)
 		}
-		batchNum := i/p.batchSize + 1
-
-		slog.DebugContext(ctx, "embedding batch", "batch", batchNum, "of", batches, "size", end-i)
 
 		batch, err := p.embedBatch(ctx, texts[i:end])
 		if err != nil {
@@ -69,9 +67,18 @@ func (p *openAICompatible) Embed(ctx context.Context, texts []string) ([][]float
 }
 
 func (p *openAICompatible) embedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	truncated := make([]string, len(texts))
+	for i, t := range texts {
+		if len(t) > p.maxChars {
+			slog.WarnContext(ctx, "truncating embedding input", "original_len", len(t), "max_chars", p.maxChars)
+			t = t[:p.maxChars]
+		}
+		truncated[i] = t
+	}
+
 	body := map[string]any{
 		"model": p.model,
-		"input": texts,
+		"input": truncated,
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -101,8 +108,9 @@ func (p *openAICompatible) embedBatch(ctx context.Context, texts []string) ([][]
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		slog.ErrorContext(ctx, "embeddings request failed", "status", resp.StatusCode, "body", string(respBody))
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+		preview := truncateString(string(respBody), 512)
+		slog.ErrorContext(ctx, "embedding failed", "status", resp.StatusCode, "body", preview)
+		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, preview)
 	}
 
 	var parsed embeddingsResponse
@@ -127,9 +135,16 @@ func (p *openAICompatible) embedBatch(ctx context.Context, texts []string) ([][]
 	if len(out) > 0 {
 		dims = len(out[0])
 	}
-	slog.DebugContext(ctx, "embeddings received", "count", len(out), "dimensions", dims)
+	slog.InfoContext(ctx, "embedded", "count", len(out), "dims", dims, "body", truncateString(string(respBody), 32))
 
 	return out, nil
+}
+
+func truncateString(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 type embeddingsResponse struct {

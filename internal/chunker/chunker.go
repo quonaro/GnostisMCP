@@ -51,16 +51,17 @@ func New() *Chunker {
 // ChunkFile produces chunks from a single file.
 func (c *Chunker) ChunkFile(ctx context.Context, file indexer.FileInfo) ([]Chunk, error) {
 	lang := detectLanguage(file.Path)
+
+	var chunks []Chunk
 	if lang == "markdown" {
-		return c.chunkMarkdown(file), nil
+		chunks = c.chunkMarkdown(file)
+	} else if handler, ok := c.handlers[lang]; ok {
+		chunks = c.chunkWithTreeSitter(ctx, file, handler)
+	} else {
+		chunks = c.chunkFallback(file, lang)
 	}
 
-	handler, ok := c.handlers[lang]
-	if !ok {
-		return c.chunkFallback(file, lang), nil
-	}
-
-	return c.chunkWithTreeSitter(ctx, file, handler), nil
+	return splitLargeChunks(chunks), nil
 }
 
 func (c *Chunker) chunkWithTreeSitter(ctx context.Context, file indexer.FileInfo, handler languageHandler) []Chunk {

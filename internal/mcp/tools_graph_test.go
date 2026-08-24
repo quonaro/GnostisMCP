@@ -34,7 +34,7 @@ func (m *mockGraphIndexer) DeadCode(_ context.Context, project, kind string, top
 }
 
 func TestTracePath_MissingFrom(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	res, err := srv.tracePath(context.Background(), mcp.CallToolRequest{}, tracePathArgs{To: "bar"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -45,7 +45,7 @@ func TestTracePath_MissingFrom(t *testing.T) {
 }
 
 func TestTracePath_MissingTo(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	res, err := srv.tracePath(context.Background(), mcp.CallToolRequest{}, tracePathArgs{From: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -56,7 +56,7 @@ func TestTracePath_MissingTo(t *testing.T) {
 }
 
 func TestTracePath_NotConfigured(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil)
 	res, err := srv.tracePath(context.Background(), mcp.CallToolRequest{}, tracePathArgs{From: "foo", To: "bar"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -78,7 +78,7 @@ func TestTracePath_Found(t *testing.T) {
 			},
 		},
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.tracePath(context.Background(), mcp.CallToolRequest{}, tracePathArgs{From: "main", To: "db"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -100,7 +100,7 @@ func TestTracePath_NotFound(t *testing.T) {
 	mock := &mockGraphIndexer{
 		traceResult: graph.TraceResult{Found: false},
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.tracePath(context.Background(), mcp.CallToolRequest{}, tracePathArgs{From: "a", To: "b"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -119,7 +119,7 @@ func TestTracePath_SymbolNotFound(t *testing.T) {
 	mock := &mockGraphIndexer{
 		traceErr: errors.New(`symbol "x" not found in call graph`),
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.tracePath(context.Background(), mcp.CallToolRequest{}, tracePathArgs{From: "x", To: "y"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -130,7 +130,7 @@ func TestTracePath_SymbolNotFound(t *testing.T) {
 }
 
 func TestDeadCode_MissingProject(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	res, err := srv.deadCode(context.Background(), mcp.CallToolRequest{}, deadCodeArgs{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -141,7 +141,7 @@ func TestDeadCode_MissingProject(t *testing.T) {
 }
 
 func TestDeadCode_NotConfigured(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil)
 	res, err := srv.deadCode(context.Background(), mcp.CallToolRequest{}, deadCodeArgs{Project: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -157,7 +157,7 @@ func TestDeadCode_Results(t *testing.T) {
 			{Symbol: "unused", Path: "/foo.go", Kind: "function"},
 		},
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.deadCode(context.Background(), mcp.CallToolRequest{}, deadCodeArgs{Project: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -177,7 +177,7 @@ func TestDeadCode_Results(t *testing.T) {
 
 func TestDeadCode_EmptyResults(t *testing.T) {
 	mock := &mockGraphIndexer{}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.deadCode(context.Background(), mcp.CallToolRequest{}, deadCodeArgs{Project: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

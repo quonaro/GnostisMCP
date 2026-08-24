@@ -22,7 +22,7 @@ func TestEmbed_ConcurrencySerialized(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := newOpenAICompatible(srv.URL, "test-model", "", 32)
+	p := newOpenAICompatible(srv.URL, "test-model", "", 32, 8000)
 
 	var wg sync.WaitGroup
 	start := make(chan struct{})
@@ -52,7 +52,7 @@ func TestEmbed_ConcurrentCallsSucceed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := newOpenAICompatible(srv.URL, "test-model", "", 32)
+	p := newOpenAICompatible(srv.URL, "test-model", "", 32, 8000)
 
 	var wg sync.WaitGroup
 	start := make(chan struct{})

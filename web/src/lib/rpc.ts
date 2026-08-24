@@ -29,35 +29,6 @@ export interface ProjectStat {
   max_file_size_mb?: number
 }
 
-export interface MemoryProviderStat {
-  name: string
-  enabled: boolean
-  chunks: number
-  files: number
-}
-
-export interface MemoryProgressState {
-  status: string
-  total_files: number
-  done_files: number
-  total_chunks: number
-  done_chunks: number
-  started_at: string
-  updated_at: string
-  error?: string
-}
-
-export interface MemoryFile {
-  path: string
-  name: string
-  provider: string
-  title: string
-  source?: string
-  date?: string
-  size: number
-  type: string
-}
-
 export interface CPUMetrics {
   usage_percent: number
   cores: number
@@ -105,8 +76,6 @@ export interface StatusResponse {
   eta?: string
   eta_seconds?: number
   project_stats: Record<string, ProjectStat>
-  memory_stats?: MemoryProviderStat[]
-  memory_progress?: MemoryProgressState
   jobs?: Job[]
   sys_metrics?: SystemMetrics
 }
@@ -409,14 +378,6 @@ export async function search(query: string, topK = 10, project?: string): Promis
     results: results || [],
     count: results?.length ?? 0,
   }
-}
-
-export async function getMemoryFiles(): Promise<MemoryFile[]> {
-  return callTool<MemoryFile[]>('memory_files')
-}
-
-export async function openMemoryFile(path: string): Promise<void> {
-  await call('open_memory_file', { path })
 }
 
 export async function getGraph(project?: string, opts?: { connected_only?: boolean; max_nodes?: number }): Promise<GraphResponse> {

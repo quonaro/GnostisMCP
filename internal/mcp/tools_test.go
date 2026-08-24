@@ -52,7 +52,7 @@ func TestFindSymbol_Match(t *testing.T) {
 			Content:   "func Baz() {}",
 		},
 	}}
-	srv := New(mock, nil, nil, nil, nil)
+	srv := New(mock, nil, nil, nil)
 	req := mcp.CallToolRequest{}
 	args := findSymbolArgs{Name: "Bar"}
 
@@ -78,7 +78,7 @@ func TestGetFileContext(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 	req := mcp.CallToolRequest{}
 	args := getFileContextArgs{Path: path, StartLine: 2, EndLine: 4}
 
@@ -96,7 +96,7 @@ func TestGetFileContext(t *testing.T) {
 
 func TestGetFileContext_MissingFile(t *testing.T) {
 	dir := t.TempDir()
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 
 	res, err := srv.getFileContext(context.Background(), mcp.CallToolRequest{}, getFileContextArgs{Path: filepath.Join(dir, "missing.go")})
 	if err != nil {
@@ -112,7 +112,7 @@ func TestListProjects(t *testing.T) {
 		{Name: "foo", Path: "/projects/foo"},
 		{Name: "bar", Path: "/projects/bar"},
 	}
-	srv := New(&mockSearcher{}, nil, nil, nil, projects)
+	srv := New(&mockSearcher{}, nil, nil, projects)
 	req := mcp.CallToolRequest{}
 
 	res, err := srv.listProjects(context.Background(), req, listProjectsArgs{})
@@ -144,7 +144,7 @@ func TestListFiles(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.listFiles(context.Background(), mcp.CallToolRequest{}, listFilesArgs{Project: "test", Pattern: "*.go"})
 	if err != nil {
 		t.Fatalf("listFiles: %v", err)
@@ -167,7 +167,7 @@ func TestListFiles_NoDirsByDefault(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.listFiles(context.Background(), mcp.CallToolRequest{}, listFilesArgs{Project: "test", Pattern: "*"})
 	if err != nil {
 		t.Fatalf("listFiles: %v", err)
@@ -190,7 +190,7 @@ func TestListFiles_IncludeDirs(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.listFiles(context.Background(), mcp.CallToolRequest{}, listFilesArgs{Project: "test", Pattern: "*", IncludeDirs: true})
 	if err != nil {
 		t.Fatalf("listFiles: %v", err)
@@ -205,7 +205,7 @@ func TestListFiles_IncludeDirs(t *testing.T) {
 }
 
 func TestListFiles_MissingProjectAndPath(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: "/tmp/test"}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: "/tmp/test"}})
 	res, err := srv.listFiles(context.Background(), mcp.CallToolRequest{}, listFilesArgs{})
 	if err != nil {
 		t.Fatalf("listFiles: %v", err)
@@ -217,7 +217,7 @@ func TestListFiles_MissingProjectAndPath(t *testing.T) {
 }
 
 func TestGrep_MissingProjectAndPath(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: "/tmp/test"}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: "/tmp/test"}})
 	res, err := srv.grep(context.Background(), mcp.CallToolRequest{}, grepArgs{Query: "foo"})
 	if err != nil {
 		t.Fatalf("grep: %v", err)
@@ -234,7 +234,7 @@ func TestGrep(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.grep(context.Background(), mcp.CallToolRequest{}, grepArgs{Project: "test", Query: "Foo"})
 	if err != nil {
 		t.Fatalf("grep: %v", err)
@@ -254,7 +254,7 @@ func TestGrep_Regex(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.grep(context.Background(), mcp.CallToolRequest{}, grepArgs{Project: "test", Query: `func [A-Z][a-z]+`, Regex: true})
 	if err != nil {
 		t.Fatalf("grep: %v", err)
@@ -277,7 +277,7 @@ func TestDirectoryTree(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.directoryTree(context.Background(), mcp.CallToolRequest{}, directoryTreeArgs{Project: "test", Depth: 2})
 	if err != nil {
 		t.Fatalf("directoryTree: %v", err)
@@ -297,7 +297,7 @@ func TestGetRecentChanges(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.getRecentChanges(context.Background(), mcp.CallToolRequest{}, getRecentChangesArgs{Project: "test", Minutes: 60})
 	if err != nil {
 		t.Fatalf("getRecentChanges: %v", err)
@@ -312,7 +312,7 @@ func TestGetRecentChanges(t *testing.T) {
 }
 
 func TestGetFileContext_OutsideProject(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, []project.Project{{Name: "test", Path: "/tmp"}})
+	srv := New(&mockSearcher{}, nil, nil, []project.Project{{Name: "test", Path: "/tmp"}})
 	res, err := srv.getFileContext(context.Background(), mcp.CallToolRequest{}, getFileContextArgs{Path: "/etc/passwd"})
 	if err != nil {
 		t.Fatalf("getFileContext: %v", err)

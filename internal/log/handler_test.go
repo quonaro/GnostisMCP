@@ -32,7 +32,7 @@ func TestHandlerLevelColors(t *testing.T) {
 	logger.Error("error")
 
 	got := buf.String()
-	for _, want := range []string{"DBG", "INF", "WRN", "ERR"} {
+	for _, want := range []string{"[DBG]", "[INF]", "[WRN]", "[ERR]"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected %s in output, got %q", want, got)
 		}

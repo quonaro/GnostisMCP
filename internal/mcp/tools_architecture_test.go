@@ -25,7 +25,7 @@ func (m *mockArchIndexer) Architecture(_ context.Context, project string) (*grap
 }
 
 func TestGetArchitecture_MissingProject(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	res, err := srv.getArchitecture(context.Background(), mcp.CallToolRequest{}, getArchitectureArgs{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -36,7 +36,7 @@ func TestGetArchitecture_MissingProject(t *testing.T) {
 }
 
 func TestGetArchitecture_NotConfigured(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil)
 	res, err := srv.getArchitecture(context.Background(), mcp.CallToolRequest{}, getArchitectureArgs{Project: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -54,7 +54,7 @@ func TestGetArchitecture_Success(t *testing.T) {
 			Languages:  map[string]int{"go": 8, "python": 2},
 		},
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.getArchitecture(context.Background(), mcp.CallToolRequest{}, getArchitectureArgs{Project: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -76,7 +76,7 @@ func TestGetArchitecture_ProjectNotFound(t *testing.T) {
 	mock := &mockArchIndexer{
 		archErr: errors.New(`project "unknown" not found`),
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.getArchitecture(context.Background(), mcp.CallToolRequest{}, getArchitectureArgs{Project: "unknown"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -24,7 +24,7 @@ func (m *mockSimhashIndexer) FindSimilar(_ context.Context, path, project string
 }
 
 func TestFindSimilar_MissingPath(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockSimhashIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockSimhashIndexer{}, nil)
 	res, err := srv.findSimilar(context.Background(), mcp.CallToolRequest{}, findSimilarArgs{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -36,7 +36,7 @@ func TestFindSimilar_MissingPath(t *testing.T) {
 }
 
 func TestFindSimilar_IndexerNotConfigured(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil)
 	res, err := srv.findSimilar(context.Background(), mcp.CallToolRequest{}, findSimilarArgs{Path: "/tmp/test.go"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -48,7 +48,7 @@ func TestFindSimilar_IndexerNotConfigured(t *testing.T) {
 }
 
 func TestFindSimilar_NoMatches(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockSimhashIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockSimhashIndexer{}, nil)
 	res, err := srv.findSimilar(context.Background(), mcp.CallToolRequest{}, findSimilarArgs{Path: "/tmp/test.go"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -74,7 +74,7 @@ func TestFindSimilar_WithMatches(t *testing.T) {
 			},
 		},
 	}
-	srv := New(&mockSearcher{}, nil, &mockSimhashIndexer{matches: matches}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockSimhashIndexer{matches: matches}, nil)
 	res, err := srv.findSimilar(context.Background(), mcp.CallToolRequest{}, findSimilarArgs{Path: "/tmp/test.go"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -94,7 +94,7 @@ func TestFindSimilar_WithProjectFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := New(&mockSearcher{}, nil, &mockSimhashIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockSimhashIndexer{}, nil)
 	res, err := srv.findSimilar(context.Background(), mcp.CallToolRequest{}, findSimilarArgs{Path: testFile, Project: "test", Threshold: 0.9, TopK: 3})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

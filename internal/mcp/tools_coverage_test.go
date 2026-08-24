@@ -30,7 +30,7 @@ func (m *mockCoverageIndexer) DetectChanges(_ context.Context, project string) (
 }
 
 func TestCheckIndexCoverage_NoPaths(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	res, err := srv.checkIndexCoverage(context.Background(), mcp.CallToolRequest{}, checkCoverageArgs{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -42,7 +42,7 @@ func TestCheckIndexCoverage_NoPaths(t *testing.T) {
 }
 
 func TestCheckIndexCoverage_NotConfigured(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil)
 	res, err := srv.checkIndexCoverage(context.Background(), mcp.CallToolRequest{}, checkCoverageArgs{Paths: []string{"/foo"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -58,7 +58,7 @@ func TestCheckIndexCoverage_Indexed(t *testing.T) {
 			{Path: "/foo/bar.go", Status: "indexed"},
 		},
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.checkIndexCoverage(context.Background(), mcp.CallToolRequest{}, checkCoverageArgs{Paths: []string{"/foo/bar.go"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -82,7 +82,7 @@ func TestCheckIndexCoverage_Stale(t *testing.T) {
 			{Path: "/foo/bar.go", Status: "stale"},
 		},
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.checkIndexCoverage(context.Background(), mcp.CallToolRequest{}, checkCoverageArgs{Paths: []string{"/foo/bar.go"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -98,7 +98,7 @@ func TestCheckIndexCoverage_Stale(t *testing.T) {
 }
 
 func TestDetectChanges_NoProject(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	res, err := srv.detectChanges(context.Background(), mcp.CallToolRequest{}, detectChangesArgs{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -110,7 +110,7 @@ func TestDetectChanges_NoProject(t *testing.T) {
 }
 
 func TestDetectChanges_NotConfigured(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil)
 	res, err := srv.detectChanges(context.Background(), mcp.CallToolRequest{}, detectChangesArgs{Project: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -127,7 +127,7 @@ func TestDetectChanges_OK(t *testing.T) {
 			{Path: "/foo/baz.go", Status: "new"},
 		},
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.detectChanges(context.Background(), mcp.CallToolRequest{}, detectChangesArgs{Project: "foo"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -152,7 +152,7 @@ func TestDetectChanges_UnknownProject(t *testing.T) {
 	mock := &mockCoverageIndexer{
 		err: errors.New(`project "nope" not found`),
 	}
-	srv := New(&mockSearcher{}, nil, mock, nil, nil)
+	srv := New(&mockSearcher{}, nil, mock, nil)
 	res, err := srv.detectChanges(context.Background(), mcp.CallToolRequest{}, detectChangesArgs{Project: "nope"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -12,7 +12,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/quonaro/gnostis/internal/config"
-	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/watcher"
 )
 
@@ -223,35 +222,5 @@ func (a *App) ReloadConfig(ctx context.Context) error {
 
 	a.scheduleWatcherRestart()
 
-	if err := a.reloadMemoryManager(ctx); err != nil {
-		return fmt.Errorf("reload memory manager: %w", err)
-	}
-
-	if a.mcp != nil {
-		a.mcp.ReloadMemoryManager(a.memoryMgr)
-	}
-
-	return nil
-}
-
-func (a *App) reloadMemoryManager(ctx context.Context) error {
-	if a.memoryMgr != nil {
-		_ = a.memoryMgr.Stop()
-		a.memoryMgr = nil
-	}
-
-	if !memoryEnabled(a.cfg.Memory) {
-		return nil
-	}
-
-	dataDir := config.InterpolateEnv(config.DefaultMemoryDataDir)
-	mgr, err := memory.NewManager(a.cfg.Memory, dataDir, a.provider, a.sqlDB)
-	if err != nil {
-		return fmt.Errorf("create memory manager: %w", err)
-	}
-	if err := mgr.Start(ctx); err != nil {
-		return fmt.Errorf("start memory manager: %w", err)
-	}
-	a.memoryMgr = mgr
 	return nil
 }

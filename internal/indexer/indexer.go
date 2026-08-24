@@ -92,7 +92,6 @@ func (idx *Indexer) Index(ctx context.Context, dir directory.Directory, proj pro
 		return nil, fmt.Errorf("walk %s: %w", dir.Path, err)
 	}
 
-	slog.InfoContext(ctx, "indexed directory", "path", dir.Path, "files", len(files))
 	return files, nil
 }
 

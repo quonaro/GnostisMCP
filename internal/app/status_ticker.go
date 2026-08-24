@@ -62,21 +62,17 @@ func (a *App) collectStatusPayload(ctx context.Context) (string, map[string]any)
 		return "", nil
 	}
 
-	memStats := a.MemoryStats(ctx)
-	memProgress := a.MemoryProgressState()
 	jobList := a.Jobs()
 
 	payload := map[string]any{
-		"projects":        projects,
-		"total_chunks":    chunks,
-		"provider":        provider,
-		"model":           model,
-		"symbols":         symbols,
-		"progress":        pstate,
-		"project_stats":   pst,
-		"memory_stats":    memStats,
-		"memory_progress": memProgress,
-		"jobs":            jobList,
+		"projects":      projects,
+		"total_chunks":  chunks,
+		"provider":      provider,
+		"model":         model,
+		"symbols":       symbols,
+		"progress":      pstate,
+		"project_stats": pst,
+		"jobs":          jobList,
 	}
 
 	eta := pstate.ETA()

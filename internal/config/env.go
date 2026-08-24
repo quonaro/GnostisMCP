@@ -23,6 +23,7 @@ func FromEnv() (Config, error) {
 			Model:     envOr("GS_EMBEDDINGS_MODEL", defaultModel),
 			APIKey:    os.Getenv("GS_EMBEDDINGS_API_KEY"),
 			BatchSize: envIntOr("GS_EMBEDDINGS_BATCH_SIZE", defaultBatchSize),
+			MaxChars:  envIntOr("GS_EMBEDDINGS_MAX_CHARS", defaultMaxChars),
 		},
 		Web: Web{
 			Port: envIntOr("GS_WEB_PORT", defaultWebPort),
@@ -33,38 +34,12 @@ func FromEnv() (Config, error) {
 	cfg.DataDir = filepath.Clean(cfg.DataDir)
 	cfg.ProjectsDirPath = filepath.Clean(cfg.ProjectsDirPath)
 
-	cfg.Memory = Memory{
-		Cascade: loadProviderConfig("cascade"),
-	}
-
 	if err := validate(&cfg); err != nil {
 		return Config{}, fmt.Errorf("validate config: %w", err)
 	}
 
 	slog.Debug("config loaded from env", "data_dir", cfg.DataDir, "model", cfg.Embeddings.Model)
 	return cfg, nil
-}
-
-func loadProviderConfig(name string) ProviderConfig {
-	prefix := "GS_MEMORY_" + strings.ToUpper(name)
-	cfg := ProviderConfig{
-		Enabled:              envBoolOr(prefix+"_ENABLED", false),
-		SourceDirs:           envListOr(prefix+"_SOURCE_DIRS", nil),
-		MinUserMessageLength: envIntOr(prefix+"_MIN_MSG_LEN", 0),
-	}
-
-	if !cfg.Enabled {
-		return cfg
-	}
-
-	if cfg.MinUserMessageLength == 0 {
-		cfg.MinUserMessageLength = defaultMinUserMessageLength
-	}
-	if len(cfg.SourceDirs) == 0 {
-		cfg.SourceDirs = existingDefaultSourceDirs(name)
-	}
-
-	return cfg
 }
 
 func validate(cfg *Config) error {
@@ -82,32 +57,6 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("embeddings batch_size must be positive")
 	}
 
-	if err := validateProvider("memory.cascade", cfg.Memory.Cascade); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func validateProvider(prefix string, cfg ProviderConfig) error {
-	if !cfg.Enabled {
-		return nil
-	}
-	if cfg.MinUserMessageLength < 0 {
-		return fmt.Errorf("%s.min_user_message_length must be non-negative", prefix)
-	}
-	if len(cfg.SourceDirs) == 0 {
-		return fmt.Errorf("%s.source_dirs is required when enabled", prefix)
-	}
-	for i, src := range cfg.SourceDirs {
-		info, err := os.Stat(src)
-		if err != nil {
-			return fmt.Errorf("%s.source_dirs[%d] %s: %w", prefix, i, src, err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("%s.source_dirs[%d] %s is not a directory", prefix, i, src)
-		}
-	}
 	return nil
 }
 
@@ -128,47 +77,6 @@ func envIntOr(key string, defaultVal int) int {
 		return defaultVal
 	}
 	return n
-}
-
-func envBoolOr(key string, defaultVal bool) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return defaultVal
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return defaultVal
-	}
-	return b
-}
-
-func envListOr(key string, defaultVal []string) []string {
-	v := os.Getenv(key)
-	if v == "" {
-		return defaultVal
-	}
-	parts := strings.Split(v, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-func existingDefaultSourceDirs(name string) []string {
-	if name != "cascade" {
-		return nil
-	}
-	var out []string
-	for _, d := range DefaultMemorySourceDirs() {
-		if _, err := os.Stat(d); err == nil {
-			out = append(out, d)
-		}
-	}
-	return out
 }
 
 // InterpolateEnv expands ${VAR} and ${VAR:-default} patterns in a string.
@@ -210,20 +118,4 @@ func expandTilde(input string) string {
 		return filepath.Join(home, input[2:])
 	}
 	return input
-}
-
-// DefaultMemorySourceDirs returns the standard Windsurf/Next/Devin/Desktop
-// Cascade trajectory directories if they exist on the current system.
-func DefaultMemorySourceDirs() []string {
-	home := os.Getenv("HOME")
-	if home == "" {
-		return nil
-	}
-	base := filepath.Join(home, ".codeium")
-	return []string{
-		filepath.Join(base, "windsurf", "cascade"),
-		filepath.Join(base, "windsurf-next", "cascade"),
-		filepath.Join(base, "devin", "cascade"),
-		filepath.Join(base, "devin-desktop", "cascade"),
-	}
 }

@@ -43,7 +43,7 @@ func (h *Handler) Handle(_ context.Context, r slog.Record) error {
 	color, label := formatLevel(r.Level)
 
 	buf := make([]byte, 0, 128+len(r.Message))
-	buf = fmt.Appendf(buf, "%s%s%s | %s", color, label, reset, r.Message)
+	buf = fmt.Appendf(buf, "%s[%s]%s %s", color, label, reset, r.Message)
 
 	r.Attrs(func(a slog.Attr) bool {
 		buf = appendAttr(buf, a, h.groups)

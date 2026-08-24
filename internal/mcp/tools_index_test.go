@@ -12,7 +12,6 @@ import (
 	"github.com/quonaro/gnostis/internal/coverage"
 	"github.com/quonaro/gnostis/internal/graph"
 	"github.com/quonaro/gnostis/internal/jobs"
-	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
 	"github.com/quonaro/gnostis/internal/simhash"
@@ -35,12 +34,6 @@ func (m *mockIndexer) ProgressState() (progress.State, error) {
 }
 func (m *mockIndexer) ProjectStats(context.Context) (map[string]stats.Project, error) {
 	return nil, nil
-}
-func (m *mockIndexer) MemoryStats(context.Context) []memory.ProviderStat {
-	return nil
-}
-func (m *mockIndexer) MemoryProgressState() memory.ProgressState {
-	return memory.ProgressState{Status: memory.MemStatusIdle}
 }
 func (m *mockIndexer) StartRebuildProject(context.Context, string) (string, error) {
 	return "job-1", nil
@@ -88,16 +81,12 @@ func (m *mockIndexer) GraphLayout(_ string, _ bool, _ int) (graph.LayoutResult, 
 	return graph.LayoutResult{}, nil
 }
 
-func (m *mockIndexer) MemoryFiles(_ context.Context) []memory.FileInfo {
-	return nil
-}
-
 func (m *mockIndexer) Jobs() []jobs.Job {
 	return nil
 }
 
 func TestReindexFiles_NoPaths(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, nil)
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil)
 	res, err := srv.reindexFiles(context.Background(), mcp.CallToolRequest{}, reindexFilesArgs{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -109,7 +98,7 @@ func TestReindexFiles_NoPaths(t *testing.T) {
 }
 
 func TestReindexFiles_NotConfigured(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, nil)
+	srv := New(&mockSearcher{}, nil, nil, nil)
 	res, err := srv.reindexFiles(context.Background(), mcp.CallToolRequest{}, reindexFilesArgs{Paths: []string{"/foo"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -120,7 +109,7 @@ func TestReindexFiles_NotConfigured(t *testing.T) {
 }
 
 func TestReindexFiles_RelativePath(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, &mockIndexer{}, nil, []project.Project{{Name: "test", Path: "/tmp"}})
+	srv := New(&mockSearcher{}, nil, &mockIndexer{}, []project.Project{{Name: "test", Path: "/tmp"}})
 	res, err := srv.reindexFiles(context.Background(), mcp.CallToolRequest{}, reindexFilesArgs{Paths: []string{"relative/path.go"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -139,7 +128,7 @@ func TestReindexFiles_OutsideProject(t *testing.T) {
 	}
 
 	mock := &mockIndexer{}
-	srv := New(&mockSearcher{}, nil, mock, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, mock, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.reindexFiles(context.Background(), mcp.CallToolRequest{}, reindexFilesArgs{Paths: []string{path}})
 	if err != nil {
 		t.Fatalf("reindexFiles: %v", err)
@@ -152,7 +141,7 @@ func TestReindexFiles_OutsideProject(t *testing.T) {
 func TestReindexFiles_Directory(t *testing.T) {
 	dir := t.TempDir()
 	mock := &mockIndexer{}
-	srv := New(&mockSearcher{}, nil, mock, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, mock, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.reindexFiles(context.Background(), mcp.CallToolRequest{}, reindexFilesArgs{Paths: []string{dir}})
 	if err != nil {
 		t.Fatalf("reindexFiles: %v", err)
@@ -181,7 +170,7 @@ func TestReindexFiles_OK(t *testing.T) {
 	}
 
 	mock := &mockIndexer{}
-	srv := New(&mockSearcher{}, nil, mock, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, mock, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.reindexFiles(context.Background(), mcp.CallToolRequest{}, reindexFilesArgs{Paths: []string{path}})
 	if err != nil {
 		t.Fatalf("reindexFiles: %v", err)
@@ -207,7 +196,7 @@ func TestReindexFiles_IndexerError(t *testing.T) {
 	}
 
 	mock := &mockIndexer{err: errors.New("boom")}
-	srv := New(&mockSearcher{}, nil, mock, nil, []project.Project{{Name: "test", Path: dir}})
+	srv := New(&mockSearcher{}, nil, mock, []project.Project{{Name: "test", Path: dir}})
 	res, err := srv.reindexFiles(context.Background(), mcp.CallToolRequest{}, reindexFilesArgs{Paths: []string{path}})
 	if err != nil {
 		t.Fatalf("unexpected internal error: %v", err)

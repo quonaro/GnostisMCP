@@ -145,21 +145,20 @@ func New(cfg config.Config) (*App, error) {
 	}
 	a.updateSnapshots(cfg, projects)
 
-	if memoryEnabled(cfg.Memory) {
-		dataDir := config.InterpolateEnv(config.DefaultMemoryDataDir)
-		mgr, err := memory.NewManager(cfg.Memory, dataDir, provider, sqlDB)
-		if err != nil {
-			_ = sqlDB.Close()
-			return nil, fmt.Errorf("create memory manager: %w", err)
-		}
-		if err := mgr.Start(context.Background()); err != nil {
-			_ = sqlDB.Close()
-			return nil, fmt.Errorf("start memory manager: %w", err)
-		}
-		a.memoryMgr = mgr
+	dataDir := config.InterpolateEnv(config.DefaultMemoryDataDir)
+	mgr, err := memory.NewManager(dataDir, provider, sqlDB)
+	if err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("create memory manager: %w", err)
 	}
+	if err := mgr.Start(context.Background()); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("start memory manager: %w", err)
+	}
+	a.memoryMgr = mgr
 
-	mcpSrv := mcpServer.New(engine, symbolIndex, a, a.memoryMgr, projects)
+	mcpSrv := mcpServer.New(engine, symbolIndex, a, projects)
+
 	a.mcp = mcpSrv
 
 	a.watcher = a.newWatcher()
@@ -167,10 +166,6 @@ func New(cfg config.Config) (*App, error) {
 	a.webSrv = web.New(a.mcp.StreamableHTTPHandler(), a.mcp.WSHandler(a.mcp.DashboardHandlers()))
 
 	return a, nil
-}
-
-func memoryEnabled(cfg config.Memory) bool {
-	return cfg.Cascade.Enabled
 }
 
 // updateSnapshots updates the lock-free copies used by status/read-only APIs.
@@ -236,9 +231,7 @@ func (a *App) Run(ctx context.Context) error {
 		a.rebuildMu.Unlock()
 		<-ctx.Done()
 		_ = a.watcher.Stop()
-		if a.memoryMgr != nil {
-			_ = a.memoryMgr.Stop()
-		}
+		_ = a.memoryMgr.Stop()
 	}()
 
 	wg.Add(1)
@@ -309,7 +302,6 @@ func (a *App) initialIndex(ctx context.Context) error {
 	a.cleanupDeletedFiles(ctx)
 	var firstErr error
 	for i, dir := range a.dirs {
-		slog.InfoContext(ctx, "indexing directory", "path", dir.Path, "project", a.projects[i].Name)
 		if err := indexDirectoryWithRetry(ctx, a.ProgressWriter, dir, a.projects[i], a.indexer, a.chunker, a.provider, a.store, a.symbolIndex, a.callGraph, a.simhashIndex, a.embeddingCache, a.progress, a.indexingStats); err != nil {
 			slog.ErrorContext(ctx, "index project failed, continuing to next", "project", a.projects[i].Name, "error", err)
 			if firstErr == nil {

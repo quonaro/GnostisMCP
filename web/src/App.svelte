@@ -2,7 +2,6 @@
   import { onMount } from 'svelte'
   import Sidebar from './components/Sidebar.svelte'
   import ProjectList from './components/ProjectList.svelte'
-  import MemoryCard from './components/MemoryCard.svelte'
   import SearchOverlay from './components/SearchOverlay.svelte'
   import ProjectAddModal from './components/ProjectAddModal.svelte'
   import Toast from './components/ui/Toast.svelte'
@@ -64,7 +63,6 @@
           </div>
           <div class="lg:col-span-1 space-y-4">
             <JobQueue />
-            <MemoryCard />
           </div>
         </div>
       {:else if section === 'graph'}

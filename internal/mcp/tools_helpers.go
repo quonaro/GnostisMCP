@@ -15,16 +15,15 @@ import (
 
 // Human-readable error reason codes used by toolError.
 const (
-	errReasonInvalidArgument  = "invalid_argument"
-	errReasonProjectNotFound  = "project_not_found"
-	errReasonPathNotAllowed   = "path_not_allowed"
-	errReasonPathNotFound     = "path_not_found"
-	errReasonNotConfigured    = "not_configured"
-	errReasonNotFound         = "not_found"
-	errReasonReadFailed       = "read_failed"
-	errReasonInvalidRegex     = "invalid_regex"
-	errReasonSearchFailed     = "search_failed"
-	errReasonMemoryNotEnabled = "memory_not_enabled"
+	errReasonInvalidArgument = "invalid_argument"
+	errReasonProjectNotFound = "project_not_found"
+	errReasonPathNotAllowed  = "path_not_allowed"
+	errReasonPathNotFound    = "path_not_found"
+	errReasonNotConfigured   = "not_configured"
+	errReasonNotFound        = "not_found"
+	errReasonReadFailed      = "read_failed"
+	errReasonInvalidRegex    = "invalid_regex"
+	errReasonSearchFailed    = "search_failed"
 )
 
 func (s *Server) isPathAllowed(path string) bool {

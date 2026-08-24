@@ -12,7 +12,6 @@ import (
 	"github.com/quonaro/gnostis/internal/coverage"
 	"github.com/quonaro/gnostis/internal/graph"
 	"github.com/quonaro/gnostis/internal/jobs"
-	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
 	"github.com/quonaro/gnostis/internal/search"
@@ -38,8 +37,6 @@ type Indexer interface {
 	Info() (provider, model string, symbols int)
 	ProgressState() (progress.State, error)
 	ProjectStats(ctx context.Context) (map[string]stats.Project, error)
-	MemoryStats(ctx context.Context) []memory.ProviderStat
-	MemoryProgressState() memory.ProgressState
 	ProjectPath(name string) (string, error)
 	ReindexFiles(ctx context.Context, paths []string) error
 	StartRebuildProject(ctx context.Context, name string) (string, error)
@@ -54,7 +51,6 @@ type Indexer interface {
 	Architecture(ctx context.Context, project string) (*graph.Architecture, error)
 	FindSimilar(ctx context.Context, path, project string, threshold float64, topK int) ([]simhash.FileMatch, error)
 	GraphLayout(project string, connectedOnly bool, maxNodes int) (graph.LayoutResult, error)
-	MemoryFiles(ctx context.Context) []memory.FileInfo
 	Jobs() []jobs.Job
 }
 
@@ -70,26 +66,24 @@ func SetVersion(v string) {
 
 // Server wraps the mcp-go server and exposes Gnostis tools.
 type Server struct {
-	mu            sync.RWMutex
-	server        *mcpserver.MCPServer
-	version       string
-	engine        Searcher
-	symbols       Finder
-	indexer       Indexer
-	memoryManager *memory.Manager
-	projects      []project.Project
+	mu       sync.RWMutex
+	server   *mcpserver.MCPServer
+	version  string
+	engine   Searcher
+	symbols  Finder
+	indexer  Indexer
+	projects []project.Project
 }
 
 // New creates and configures the MCP server.
-func New(engine Searcher, symbols Finder, indexer Indexer, memoryManager *memory.Manager, projects []project.Project) *Server {
+func New(engine Searcher, symbols Finder, indexer Indexer, projects []project.Project) *Server {
 	slog.Info("creating mcp server", "name", serverName, "version", version)
 	s := &Server{
-		version:       version,
-		engine:        engine,
-		symbols:       symbols,
-		indexer:       indexer,
-		memoryManager: memoryManager,
-		projects:      projects,
+		version:  version,
+		engine:   engine,
+		symbols:  symbols,
+		indexer:  indexer,
+		projects: projects,
 	}
 
 	s.server = mcpserver.NewMCPServer(
@@ -107,13 +101,6 @@ func (s *Server) ReloadProjects(projects []project.Project) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.projects = projects
-}
-
-// ReloadMemoryManager replaces the memory manager used by memory tools.
-func (s *Server) ReloadMemoryManager(mgr *memory.Manager) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.memoryManager = mgr
 }
 
 // StartStdio runs the MCP server over stdio. It blocks until stdin is closed
@@ -153,11 +140,6 @@ func (s *Server) registerTools() {
 	s.server.AddTool(addProjectTool(), mcp.NewTypedToolHandler(s.addProject))
 	s.server.AddTool(editProjectTool(), mcp.NewTypedToolHandler(s.editProject))
 	s.server.AddTool(removeProjectTool(), mcp.NewTypedToolHandler(s.removeProject))
-	s.server.AddTool(memorySearchTool(), mcp.NewTypedToolHandler(s.memorySearch))
-	s.server.AddTool(memoryWriteTool(), mcp.NewTypedToolHandler(s.memoryWrite))
-	s.server.AddTool(memoryListTool(), mcp.NewTypedToolHandler(s.memoryList))
-	s.server.AddTool(memoryReadTool(), mcp.NewTypedToolHandler(s.memoryRead))
-	s.server.AddTool(rebuildMemoryTool(), mcp.NewTypedToolHandler(s.rebuildMemory))
 	s.server.AddTool(checkIndexCoverageTool(), mcp.NewTypedToolHandler(s.checkIndexCoverage))
 	s.server.AddTool(detectChangesTool(), mcp.NewTypedToolHandler(s.detectChanges))
 	s.server.AddTool(tracePathTool(), mcp.NewTypedToolHandler(s.tracePath))
@@ -165,7 +147,6 @@ func (s *Server) registerTools() {
 	s.server.AddTool(getArchitectureTool(), mcp.NewTypedToolHandler(s.getArchitecture))
 	s.server.AddTool(findSimilarTool(), mcp.NewTypedToolHandler(s.findSimilar))
 	s.server.AddTool(graphLayoutTool(), mcp.NewTypedToolHandler(s.graphLayout))
-	s.server.AddTool(memoryFilesTool(), mcp.NewTypedToolHandler(s.memoryFiles))
 }
 
 func findSymbolTool() mcp.Tool {

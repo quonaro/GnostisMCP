@@ -3,271 +3,68 @@ package memory
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
-
-	"github.com/quonaro/gnostis/internal/chat_providers/all"
-	"github.com/quonaro/gnostis/internal/config"
 	"github.com/quonaro/gnostis/internal/db"
 	"github.com/quonaro/gnostis/internal/embeddings"
 )
 
-const syncInterval = 5 * time.Minute
-
-// Manager keeps exported memory Markdown files in sync with local chat providers.
+// Manager manages user-written memory notes stored as Markdown files
+// and indexed in a vector store for semantic search.
 type Manager struct {
-	dataDir   string
-	providers []*Provider
-	indexer   *Indexer
-	watcher   *fsnotify.Watcher
-	stop      chan struct{}
-	wg        sync.WaitGroup
-	provider  embeddings.Provider
-	cache     map[string][]float32
-	pending   map[string]struct{}
-	progress  *progressTracker
+	dataDir  string
+	indexer  *Indexer
+	provider embeddings.Provider
+	cache    map[string][]float32
 }
 
-// NewManager creates a memory manager from configuration.
-func NewManager(cfg config.Memory, dataDir string, provider embeddings.Provider, database *db.DB) (*Manager, error) {
-	registry := all.NewRegistry()
-	var providers []*Provider
-	for _, p := range registry.Providers() {
-		var pc config.ProviderConfig
-		switch p.Name() {
-		case "cascade":
-			pc = cfg.Cascade
-		}
-		providers = append(providers, NewProvider(p, pc))
-	}
-
+// NewManager creates a memory manager for user notes.
+func NewManager(dataDir string, provider embeddings.Provider, database *db.DB) (*Manager, error) {
 	store, err := NewStore(context.Background(), dataDir, database)
 	if err != nil {
 		return nil, fmt.Errorf("open memory store: %w", err)
 	}
 
 	return &Manager{
-		dataDir:   dataDir,
-		providers: providers,
-		indexer:   NewIndexer(store),
-		stop:      make(chan struct{}),
-		provider:  provider,
-		cache:     make(map[string][]float32),
-		pending:   make(map[string]struct{}),
-		progress:  newProgressTracker(),
+		dataDir:  dataDir,
+		indexer:  NewIndexer(store),
+		provider: provider,
+		cache:    make(map[string][]float32),
 	}, nil
 }
 
-// Start creates the memory data directory, begins watching source directories,
-// and performs the initial export/index in the background so that MCP startup
-// is not blocked by large dialogue backlogs.
-func (m *Manager) Start(ctx context.Context) error {
-	if err := os.MkdirAll(m.dataDir, 0o755); err != nil {
-		return fmt.Errorf("create memory data dir: %w", err)
-	}
-
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return fmt.Errorf("create memory watcher: %w", err)
-	}
-	m.watcher = watcher
-
-	for _, p := range m.providers {
-		if !p.Enabled() {
-			continue
-		}
-		for _, src := range p.SourceDirs() {
-			if err := m.watchRecursive(src); err != nil {
-				slog.WarnContext(ctx, "watch memory source dir", "provider", p.Name(), "path", src, "error", err)
-			}
-		}
-	}
-
-	m.wg.Add(1)
-	go m.run(ctx)
-
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		if err := m.syncAll(ctx, nil); err != nil {
-			slog.ErrorContext(ctx, "initial memory sync failed", "error", err)
-		}
-	}()
-
-	return nil
+// Start creates the memory data directory if it does not exist.
+func (m *Manager) Start(_ context.Context) error {
+	return os.MkdirAll(m.dataDir, 0o755)
 }
 
-// Stop shuts down the memory watcher.
-func (m *Manager) Stop() error {
-	close(m.stop)
-	m.wg.Wait()
-	if m.watcher != nil {
-		return m.watcher.Close()
-	}
-	return nil
-}
+// Stop is a no-op (no background goroutines to stop).
+func (m *Manager) Stop() error { return nil }
 
-func (m *Manager) watchRecursive(root string) error {
-	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if err := m.watcher.Add(path); err != nil {
-				return fmt.Errorf("watch %s: %w", path, err)
-			}
-		}
-		return nil
-	})
-}
-
-func (m *Manager) run(ctx context.Context) {
-	defer m.wg.Done()
-	ticker := time.NewTicker(syncInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-m.stop:
-			return
-		case <-ticker.C:
-			var skip map[string]struct{}
-			if len(m.pending) > 0 {
-				skip = m.pending
-				m.pending = make(map[string]struct{})
-				for path := range skip {
-					if err := m.exportFile(ctx, path); err != nil {
-						slog.ErrorContext(ctx, "export memory file", "path", path, "error", err)
-					}
-				}
-			}
-			if err := m.syncAll(ctx, skip); err != nil {
-				slog.ErrorContext(ctx, "periodic memory sync failed", "error", err)
-			}
-		case event, ok := <-m.watcher.Events:
-			if !ok {
-				return
-			}
-			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
-				m.pending[event.Name] = struct{}{}
-			}
-		case err, ok := <-m.watcher.Errors:
-			if !ok {
-				return
-			}
-			slog.ErrorContext(ctx, "memory watcher error", "error", err)
-		}
-	}
-}
-
-func (m *Manager) syncAll(ctx context.Context, skip map[string]struct{}) error {
-	var files []string
-	for _, p := range m.providers {
-		if !p.Enabled() {
-			continue
-		}
-		for _, src := range p.SourceDirs() {
-			entries, err := os.ReadDir(src)
-			if err != nil {
-				if os.IsNotExist(err) {
-					slog.WarnContext(ctx, "memory source dir does not exist, skipping", "provider", p.Name(), "path", src)
-					continue
-				}
-				slog.WarnContext(ctx, "read memory source dir", "provider", p.Name(), "path", src, "error", err)
-				continue
-			}
-			for _, entry := range entries {
-				if entry.IsDir() {
-					continue
-				}
-				path := filepath.Join(src, entry.Name())
-				if _, ok := skip[path]; ok {
-					continue
-				}
-				files = append(files, path)
-			}
-		}
-	}
-
-	m.progress.start(len(files))
-
-	var exported int
-	for _, path := range files {
-		if err := m.exportFile(ctx, path); err != nil {
-			slog.ErrorContext(ctx, "export memory file", "path", path, "error", err)
-			continue
-		}
-		exported++
-		m.progress.addFiles(1)
-	}
-
-	if exported > 0 {
-		slog.InfoContext(ctx, "memory sync complete", "exported", exported, "chunks", m.Store().Count())
-	}
-	m.progress.done()
-	return nil
-}
-
-func (m *Manager) exportFile(ctx context.Context, path string) error {
-	for _, p := range m.providers {
-		if !p.Enabled() {
-			continue
-		}
-		for _, ext := range supportedExtensions(p.Provider) {
-			if !strings.HasSuffix(path, ext) {
-				continue
-			}
-			plaintext, err := p.Decrypt(path)
-			if err != nil {
-				slog.WarnContext(ctx, "decrypt memory file failed", "provider", p.Name(), "path", path, "error", err)
-				continue
-			}
-			mdPath, err := p.Exporter().ExportSession(p.Provider, path, m.dataDir, plaintext)
-			if err != nil {
-				return fmt.Errorf("export %s: %w", p.Name(), err)
-			}
-			if err := m.indexer.IndexFile(ctx, p.Name(), mdPath, m.provider, m.cache); err != nil {
-				return fmt.Errorf("index %s: %w", p.Name(), err)
-			}
-			return nil
-		}
-	}
-	return nil
-}
-
-func supportedExtensions(p interface{ Name() string }) []string {
-	switch p.Name() {
-	case "cascade":
-		return []string{".pb"}
-	default:
-		return []string{".pb"}
-	}
-}
-
-// Rebuild clears the memory store and re-exports/re-indexes all enabled providers.
+// Rebuild clears the memory store and re-indexes all note files.
 func (m *Manager) Rebuild(ctx context.Context) error {
-	slog.InfoContext(ctx, "rebuilding memory index")
-
 	store := m.Store()
 	paths := store.Paths()
 	if err := store.DeleteByPaths(ctx, paths); err != nil {
 		return fmt.Errorf("clear memory store: %w", err)
 	}
 
-	if err := m.syncAll(ctx, nil); err != nil {
-		m.progress.fail(err)
-		return fmt.Errorf("sync memory providers: %w", err)
+	entries, err := os.ReadDir(m.dataDir)
+	if err != nil {
+		return fmt.Errorf("read memory data dir: %w", err)
 	}
-
-	slog.InfoContext(ctx, "memory rebuild complete", "chunks", store.Count())
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(m.dataDir, entry.Name())
+		if err := m.indexer.IndexFile(ctx, "note", path, m.provider, m.cache); err != nil {
+			return fmt.Errorf("index memory file %s: %w", path, err)
+		}
+	}
 	return nil
 }
 
@@ -281,50 +78,9 @@ func (m *Manager) Provider() embeddings.Provider {
 	return m.provider
 }
 
-// DataDir returns the directory where exported memory Markdown files are stored.
+// DataDir returns the directory where memory Markdown files are stored.
 func (m *Manager) DataDir() string {
 	return m.dataDir
-}
-
-// Providers returns the configured memory providers.
-func (m *Manager) Providers() []*Provider {
-	return m.providers
-}
-
-// ProgressState returns a snapshot of the current memory indexing progress.
-func (m *Manager) ProgressState() ProgressState {
-	return m.progress.snapshot()
-}
-
-// ProviderStat holds per-provider memory indexing statistics.
-type ProviderStat struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-	Chunks  int    `json:"chunks"`
-	Files   int    `json:"files"`
-}
-
-// Stats returns per-provider memory indexing statistics.
-func (m *Manager) Stats(ctx context.Context) []ProviderStat {
-	store := m.Store()
-	out := make([]ProviderStat, 0, len(m.providers))
-	for _, p := range m.providers {
-		stat := ProviderStat{
-			Name:    p.Name(),
-			Enabled: p.Enabled(),
-		}
-		if p.Enabled() {
-			count, err := store.CountByProvider(ctx, p.Name())
-			if err != nil {
-				slog.WarnContext(ctx, "count memory chunks for provider", "provider", p.Name(), "error", err)
-			} else {
-				stat.Chunks = count
-			}
-			stat.Files = len(store.Paths())
-		}
-		out = append(out, stat)
-	}
-	return out
 }
 
 // WriteNote writes a user note to the memory data dir and indexes it.

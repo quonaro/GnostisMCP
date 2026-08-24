@@ -40,30 +40,3 @@ func (s *Server) graphLayout(ctx context.Context, _ mcp.CallToolRequest, args gr
 	}
 	return mcp.NewToolResultText(string(data)), nil
 }
-
-// --- memory_files ---
-
-func memoryFilesTool() mcp.Tool {
-	return mcp.NewTool("memory_files",
-		mcp.WithDescription("List exported memory files with metadata (path, provider, title, date, size)."),
-	)
-}
-
-type memoryFilesArgs struct{}
-
-func (s *Server) memoryFiles(ctx context.Context, _ mcp.CallToolRequest, _ memoryFilesArgs) (*mcp.CallToolResult, error) {
-	if s.indexer == nil {
-		return toolError(errReasonNotConfigured, "indexer is not configured", ""), nil
-	}
-
-	files := s.indexer.MemoryFiles(ctx)
-	if len(files) == 0 {
-		return mcp.NewToolResultText("[]"), nil
-	}
-
-	data, err := json.Marshal(files)
-	if err != nil {
-		return toolError(errReasonSearchFailed, "marshal memory_files result", ""), nil
-	}
-	return mcp.NewToolResultText(string(data)), nil
-}

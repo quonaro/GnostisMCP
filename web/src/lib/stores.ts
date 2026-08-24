@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store'
-import type { StatusResponse, ProgressState, MemoryProgressState, SearchResult, GraphResponse, Architecture, DeadCodeResponse, ChangesResponse } from './api'
+import type { StatusResponse, ProgressState, SearchResult, GraphResponse, Architecture, DeadCodeResponse, ChangesResponse } from './api'
 import { getStatus, subscribeToEvents } from './api'
 
 export type Section = 'overview' | 'graph' | 'architecture' | 'dead-code' | 'changes'
@@ -27,7 +27,6 @@ export const selectedProject = writable<string>('')
 
 export const status = writable<StatusResponse | null>(null)
 export const progress = writable<ProgressState | null>(null)
-export const memoryProgress = writable<MemoryProgressState | null>(null)
 export const searchResults = writable<SearchResult[]>([])
 export const loading = writable(false)
 export const error = writable<string | null>(null)
@@ -67,7 +66,6 @@ export async function refreshStatus() {
     const s = await getStatus()
     status.set(s)
     progress.set(s.progress)
-    memoryProgress.set(s.memory_progress ?? null)
   } catch (e) {
     error.set(String(e))
   }
@@ -77,7 +75,6 @@ export function initEventSource() {
   return subscribeToEvents((s) => {
     status.set(s)
     progress.set(s.progress)
-    memoryProgress.set(s.memory_progress ?? null)
     loading.set(false)
     error.set(null)
   })

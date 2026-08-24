@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 
 	"github.com/quonaro/gnostis/internal/chunker"
@@ -52,9 +51,6 @@ func embedChunks(ctx context.Context, provider embeddings.Provider, chunks []chu
 		if batchSize <= 0 {
 			batchSize = 32
 		}
-
-		totalBatches := (len(missingTexts) + batchSize - 1) / batchSize
-		slog.DebugContext(ctx, "embedding chunks", "count", len(missingTexts), "cached", len(chunks)-len(missingTexts), "batch_size", batchSize, "batches", totalBatches, "model", provider.ModelName())
 
 		const maxConcurrent = 4
 		g, gctx := errgroup.WithContext(ctx)

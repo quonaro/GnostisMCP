@@ -86,24 +86,6 @@ func (a *App) FailProgress(err error) {
 	}
 }
 
-// MemoryStats returns per-provider memory indexing statistics, or nil if the
-// memory manager is not enabled.
-func (a *App) MemoryStats(ctx context.Context) []memory.ProviderStat {
-	if a.memoryMgr == nil {
-		return nil
-	}
-	return a.memoryMgr.Stats(ctx)
-}
-
-// MemoryProgressState returns the current memory indexing progress, or an idle
-// state if the memory manager is not enabled.
-func (a *App) MemoryProgressState() memory.ProgressState {
-	if a.memoryMgr == nil {
-		return memory.ProgressState{Status: memory.MemStatusIdle}
-	}
-	return a.memoryMgr.ProgressState()
-}
-
 // Jobs returns a snapshot of all jobs in the queue (pending, running, recently completed).
 func (a *App) Jobs() []jobs.Job {
 	if a.jobQueue == nil {
@@ -112,21 +94,13 @@ func (a *App) Jobs() []jobs.Job {
 	return a.jobQueue.Snapshot()
 }
 
-// MemoryFiles returns metadata for every exported memory file, or nil if the
-// memory manager is not enabled.
+// MemoryFiles returns metadata for every memory file.
 func (a *App) MemoryFiles(ctx context.Context) []memory.FileInfo {
-	if a.memoryMgr == nil {
-		return nil
-	}
 	return a.memoryMgr.ListFiles(ctx)
 }
 
-// MemoryDataDir returns the directory where exported memory files are stored,
-// or an empty string if the memory manager is not enabled.
+// MemoryDataDir returns the directory where memory files are stored.
 func (a *App) MemoryDataDir() string {
-	if a.memoryMgr == nil {
-		return ""
-	}
 	return a.memoryMgr.DataDir()
 }
 

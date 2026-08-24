@@ -89,7 +89,12 @@ func (s *Store) AddChunks(ctx context.Context, chunks []chunker.Chunk, embedding
 	defer s.mu.Unlock()
 
 	if s.dim != 0 && s.dim != dim {
-		return fmt.Errorf("embedding dimension mismatch: expected %d, got %d; clear the memory data directory and restart after changing the embedding model", s.dim, dim)
+		if s.col.Count() == 0 {
+			slog.InfoContext(ctx, "resetting stale memory embedding dimension", "old_dim", s.dim, "new_dim", dim)
+			s.dim = 0
+		} else {
+			return fmt.Errorf("embedding dimension mismatch: expected %d, got %d; clear the memory data directory and restart after changing the embedding model", s.dim, dim)
+		}
 	}
 
 	ids := make([]string, len(chunks))
@@ -200,29 +205,6 @@ func (s *Store) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.col.Count()
-}
-
-// CountByProvider returns the number of memory chunks for a given provider ID.
-func (s *Store) CountByProvider(ctx context.Context, providerID string) (int, error) {
-	if providerID == "" {
-		return 0, nil
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.dim == 0 || s.col.Count() == 0 {
-		return 0, nil
-	}
-
-	query := make([]float32, s.dim)
-	query[0] = 1
-
-	results, err := s.col.QueryEmbedding(ctx, query, s.col.Count(), map[string]string{"project_id": projectIDPrefix + providerID}, nil)
-	if err != nil {
-		return 0, fmt.Errorf("query memory provider %q: %w", providerID, err)
-	}
-	return len(results), nil
 }
 
 func validateEmbeddings(vectors [][]float32) (int, error) {

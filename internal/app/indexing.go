@@ -70,8 +70,6 @@ func indexDirectory(ctx context.Context, out io.Writer, dir directory.Directory,
 	if err != nil {
 		return fmt.Errorf("walk directory: %w", err)
 	}
-	slog.InfoContext(ctx, "indexed files", "project", proj.Name, "count", len(files))
-
 	if prog != nil {
 		_ = prog.Start(proj.Name, len(files))
 		_ = prog.SetPhase(progress.PhaseChunking)
@@ -100,7 +98,6 @@ func indexDirectory(ctx context.Context, out io.Writer, dir directory.Directory,
 		if prog != nil {
 			_ = prog.Done()
 		}
-		slog.InfoContext(ctx, "no chunks to embed", "project", proj.Name)
 		updateStats(ctx, indexingStats, st, proj.Name, provider.ModelName())
 		return nil
 	}
@@ -164,7 +161,6 @@ func indexDirectory(ctx context.Context, out io.Writer, dir directory.Directory,
 	if prog != nil {
 		_ = prog.Done()
 	}
-	slog.InfoContext(ctx, "stored chunks", "project", proj.Name, "count", storedChunks)
 	return nil
 }
 

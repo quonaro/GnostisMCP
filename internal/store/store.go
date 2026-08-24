@@ -102,7 +102,12 @@ func (s *Store) AddChunks(ctx context.Context, chunks []chunker.Chunk, embedding
 	defer s.mu.Unlock()
 
 	if s.dim != 0 && s.dim != dim {
-		return fmt.Errorf("embedding dimension mismatch: expected %d, got %d; clear the data directory and restart after changing the embedding model", s.dim, dim)
+		if s.col.Count() == 0 {
+			slog.InfoContext(ctx, "resetting stale embedding dimension", "old_dim", s.dim, "new_dim", dim)
+			s.dim = 0
+		} else {
+			return fmt.Errorf("embedding dimension mismatch: expected %d, got %d; clear the data directory and restart after changing the embedding model", s.dim, dim)
+		}
 	}
 
 	ids := make([]string, len(chunks))
