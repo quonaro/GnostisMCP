@@ -8,6 +8,10 @@ export default defineConfig({
     port: 7879,
     proxy: {
       '/api': 'http://127.0.0.1:7878',
+      '/ws': {
+        target: 'http://127.0.0.1:7878',
+        ws: true,
+      },
     },
   },
   build: {

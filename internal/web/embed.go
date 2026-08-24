@@ -18,7 +18,7 @@ func (s *Server) handleSPA() http.Handler {
 	if err != nil {
 		slog.Error("create sub filesystem", "error", err)
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeError(w, http.StatusInternalServerError, "static files not available")
+			http.Error(w, "static files not available", http.StatusInternalServerError)
 		})
 	}
 
@@ -26,11 +26,6 @@ func (s *Server) handleSPA() http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-
-		if strings.HasPrefix(path, "/api/") {
-			http.NotFound(w, r)
-			return
-		}
 
 		if path == "/" {
 			data, err := fs.ReadFile(sub, "index.html")

@@ -43,16 +43,16 @@ func TestInterpolateTilde(t *testing.T) {
 }
 
 func TestFromEnvDefaults(t *testing.T) {
-	t.Setenv("GNOSTIS_DATA_DIR", "/tmp/gnostis-test-data")
-	t.Setenv("GNOSTIS_PROJECTS_DIR", "/tmp/gnostis-test-projects")
+	t.Setenv("GS_DATA_DIR", "/tmp/gnostis-test-data")
+	t.Setenv("GS_PROJECTS_DIR", "/tmp/gnostis-test-projects")
 
 	cfg, err := FromEnv()
 	if err != nil {
 		t.Fatalf("FromEnv: %v", err)
 	}
 
-	if cfg.Embeddings.Provider != "ollama" {
-		t.Errorf("default provider = %q, want ollama", cfg.Embeddings.Provider)
+	if cfg.Embeddings.URL != "http://localhost:7997/v1" {
+		t.Errorf("default url = %q, want http://localhost:7997/v1", cfg.Embeddings.URL)
 	}
 	if cfg.Embeddings.BatchSize != 32 {
 		t.Errorf("default batch size = %d, want 32", cfg.Embeddings.BatchSize)
@@ -63,10 +63,10 @@ func TestFromEnvDefaults(t *testing.T) {
 }
 
 func TestFromEnvMemoryCascadeDefaults(t *testing.T) {
-	t.Setenv("GNOSTIS_DATA_DIR", "/tmp/gnostis-test-data")
-	t.Setenv("GNOSTIS_PROJECTS_DIR", "/tmp/gnostis-test-projects")
-	t.Setenv("GNOSTIS_MEMORY_CASCADE_ENABLED", "true")
-	t.Setenv("GNOSTIS_MEMORY_CASCADE_SOURCE_DIRS", "/tmp")
+	t.Setenv("GS_DATA_DIR", "/tmp/gnostis-test-data")
+	t.Setenv("GS_PROJECTS_DIR", "/tmp/gnostis-test-projects")
+	t.Setenv("GS_MEMORY_CASCADE_ENABLED", "true")
+	t.Setenv("GS_MEMORY_CASCADE_SOURCE_DIRS", "/tmp")
 
 	cfg, err := FromEnv()
 	if err != nil {

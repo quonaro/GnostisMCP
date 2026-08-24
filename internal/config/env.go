@@ -15,19 +15,17 @@ var envPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\
 // FromEnv reads all configuration from environment variables and applies defaults.
 func FromEnv() (Config, error) {
 	cfg := Config{
-		LogLevel:        envOr("GNOSTIS_LOG_LEVEL", defaultLogLevel),
-		DataDir:         envOr("GNOSTIS_DATA_DIR", InterpolateEnv(defaultDataDir)),
-		ProjectsDirPath: envOr("GNOSTIS_PROJECTS_DIR", InterpolateEnv(DefaultProjectsDir)),
+		LogLevel:        envOr("GS_LOG_LEVEL", defaultLogLevel),
+		DataDir:         envOr("GS_DATA_DIR", InterpolateEnv(defaultDataDir)),
+		ProjectsDirPath: envOr("GS_PROJECTS_DIR", InterpolateEnv(DefaultProjectsDir)),
 		Embeddings: Embeddings{
-			Provider:  envOr("GNOSTIS_EMBEDDINGS_PROVIDER", defaultProvider),
-			URL:       envOr("GNOSTIS_EMBEDDINGS_URL", defaultURL),
-			Model:     envOr("GNOSTIS_EMBEDDINGS_MODEL", defaultModel),
-			APIKey:    os.Getenv("GNOSTIS_EMBEDDINGS_API_KEY"),
-			BatchSize: envIntOr("GNOSTIS_EMBEDDINGS_BATCH_SIZE", defaultBatchSize),
+			URL:       envOr("GS_EMBEDDINGS_URL", defaultURL),
+			Model:     envOr("GS_EMBEDDINGS_MODEL", defaultModel),
+			APIKey:    os.Getenv("GS_EMBEDDINGS_API_KEY"),
+			BatchSize: envIntOr("GS_EMBEDDINGS_BATCH_SIZE", defaultBatchSize),
 		},
 		Web: Web{
-			Enabled: envBoolOr("GNOSTIS_WEB_ENABLED", defaultWebEnabled),
-			Port:    envIntOr("GNOSTIS_WEB_PORT", defaultWebPort),
+			Port: envIntOr("GS_WEB_PORT", defaultWebPort),
 		},
 	}
 
@@ -43,12 +41,12 @@ func FromEnv() (Config, error) {
 		return Config{}, fmt.Errorf("validate config: %w", err)
 	}
 
-	slog.Debug("config loaded from env", "data_dir", cfg.DataDir, "provider", cfg.Embeddings.Provider, "model", cfg.Embeddings.Model)
+	slog.Debug("config loaded from env", "data_dir", cfg.DataDir, "model", cfg.Embeddings.Model)
 	return cfg, nil
 }
 
 func loadProviderConfig(name string) ProviderConfig {
-	prefix := "GNOSTIS_MEMORY_" + strings.ToUpper(name)
+	prefix := "GS_MEMORY_" + strings.ToUpper(name)
 	cfg := ProviderConfig{
 		Enabled:              envBoolOr(prefix+"_ENABLED", false),
 		SourceDirs:           envListOr(prefix+"_SOURCE_DIRS", nil),
@@ -74,11 +72,6 @@ func validate(cfg *Config) error {
 	case "debug", "info", "warn", "error":
 	default:
 		return fmt.Errorf("unsupported log_level: %s", cfg.LogLevel)
-	}
-
-	provider := strings.ToLower(cfg.Embeddings.Provider)
-	if provider != "ollama" && provider != "openai" {
-		return fmt.Errorf("unsupported embeddings provider: %s", cfg.Embeddings.Provider)
 	}
 
 	if cfg.Embeddings.Model == "" {

@@ -6,14 +6,17 @@ require github.com/bmatcuk/doublestar/v4 v4.6.1
 
 require (
 	github.com/ch-braun/go-spring-electrical-layout v0.3.0
+	github.com/coder/websocket v1.8.15
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/mark3labs/mcp-go v0.56.0
 	github.com/philippgille/chromem-go v0.7.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82
+	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
 	gonum.org/v1/gonum v0.17.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (
@@ -32,5 +35,4 @@ require (
 	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.57.0 // indirect
 )

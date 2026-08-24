@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/quonaro/gnostis/internal/chunker"
 	"github.com/quonaro/gnostis/internal/embeddings"
 	"github.com/quonaro/gnostis/internal/symbol"
+	"golang.org/x/sync/errgroup"
 )
 
 func chunksToSymbolChunks(chunks []chunker.Chunk) []symbol.Chunk {
@@ -51,7 +53,15 @@ func embedChunks(ctx context.Context, provider embeddings.Provider, chunks []chu
 			batchSize = 32
 		}
 
-		slog.DebugContext(ctx, "embedding chunks", "count", len(missingTexts), "cached", len(chunks)-len(missingTexts), "batch_size", batchSize, "model", provider.ModelName())
+		totalBatches := (len(missingTexts) + batchSize - 1) / batchSize
+		slog.DebugContext(ctx, "embedding chunks", "count", len(missingTexts), "cached", len(chunks)-len(missingTexts), "batch_size", batchSize, "batches", totalBatches, "model", provider.ModelName())
+
+		const maxConcurrent = 4
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(maxConcurrent)
+
+		var cacheMu sync.Mutex
+		var progressMu sync.Mutex
 
 		for i := 0; i < len(missingTexts); i += batchSize {
 			end := i + batchSize
@@ -59,24 +69,37 @@ func embedChunks(ctx context.Context, provider embeddings.Provider, chunks []chu
 				end = len(missingTexts)
 			}
 
-			vectors, err := provider.Embed(ctx, missingTexts[i:end])
-			if err != nil {
-				return nil, fmt.Errorf("embed batch %d-%d: %w", i, end, err)
-			}
-			if len(vectors) != end-i {
-				return nil, fmt.Errorf("expected %d embeddings, got %d", end-i, len(vectors))
-			}
-
-			for j, idx := range missingIndices[i:end] {
-				results[idx] = vectors[j]
-				if cache != nil {
-					cache[chunks[idx].ID] = vectors[j]
+			start, stop := i, end
+			g.Go(func() error {
+				vectors, err := provider.Embed(gctx, missingTexts[start:stop])
+				if err != nil {
+					return fmt.Errorf("embed batch %d-%d: %w", start, stop, err)
 				}
-			}
+				if len(vectors) != stop-start {
+					return fmt.Errorf("expected %d embeddings, got %d", stop-start, len(vectors))
+				}
 
-			if onEmbedded != nil {
-				onEmbedded(len(vectors))
-			}
+				for j, idx := range missingIndices[start:stop] {
+					results[idx] = vectors[j]
+					if cache != nil {
+						cacheMu.Lock()
+						cache[chunks[idx].ID] = vectors[j]
+						cacheMu.Unlock()
+					}
+				}
+
+				if onEmbedded != nil {
+					progressMu.Lock()
+					onEmbedded(len(vectors))
+					progressMu.Unlock()
+				}
+
+				return nil
+			})
+		}
+
+		if err := g.Wait(); err != nil {
+			return nil, err
 		}
 	}
 

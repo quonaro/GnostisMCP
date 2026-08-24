@@ -11,6 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/quonaro/gnostis/internal/coverage"
 	"github.com/quonaro/gnostis/internal/graph"
+	"github.com/quonaro/gnostis/internal/jobs"
 	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
@@ -81,6 +82,18 @@ func (m *mockIndexer) Architecture(_ context.Context, project string) (*graph.Ar
 
 func (m *mockIndexer) FindSimilar(_ context.Context, path, project string, threshold float64, topK int) ([]simhash.FileMatch, error) {
 	return nil, nil
+}
+
+func (m *mockIndexer) GraphLayout(_ string, _ bool, _ int) (graph.LayoutResult, error) {
+	return graph.LayoutResult{}, nil
+}
+
+func (m *mockIndexer) MemoryFiles(_ context.Context) []memory.FileInfo {
+	return nil
+}
+
+func (m *mockIndexer) Jobs() []jobs.Job {
+	return nil
 }
 
 func TestReindexFiles_NoPaths(t *testing.T) {

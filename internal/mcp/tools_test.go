@@ -25,56 +25,6 @@ func (m *mockSearcher) Search(ctx context.Context, query string, filters map[str
 	return m.results, nil
 }
 
-func TestSearchCodebase_EmptyQuery(t *testing.T) {
-	srv := New(&mockSearcher{}, nil, nil, nil, nil)
-	req := mcp.CallToolRequest{}
-
-	res, err := srv.searchCodebase(context.Background(), req, searchCodebaseArgs{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if res == nil || !res.IsError {
-		t.Fatalf("expected error result, got %+v", res)
-	}
-	assertTextEquals(t, res, "query is required")
-}
-
-func TestSearchCodebase_Results(t *testing.T) {
-	mock := &mockSearcher{results: []search.Result{
-		{
-			ID:        "chunk-1",
-			ProjectID: "proj",
-			Path:      "/foo/bar.go",
-			Language:  "go",
-			Symbol:    "Bar",
-			Signature: "func Bar()",
-			StartLine: 10,
-			EndLine:   20,
-			Score:     0.9,
-			Content:   "func Bar() {}",
-		},
-	}}
-	srv := New(mock, nil, nil, nil, nil)
-	req := mcp.CallToolRequest{}
-	args := searchCodebaseArgs{Query: "find bar", TopK: 5, IncludeContent: true}
-
-	res, err := srv.searchCodebase(context.Background(), req, args)
-	if err != nil {
-		t.Fatalf("searchCodebase: %v", err)
-	}
-
-	items := extractResultItems(t, res)
-	if len(items) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(items))
-	}
-	if items[0].Content == "" {
-		t.Errorf("expected content to be included")
-	}
-	if items[0].ProjectID != "proj" {
-		t.Errorf("project = %q, want proj", items[0].ProjectID)
-	}
-}
-
 func TestFindSymbol_Match(t *testing.T) {
 	mock := &mockSearcher{results: []search.Result{
 		{
@@ -358,27 +308,6 @@ func TestGetRecentChanges(t *testing.T) {
 	}
 	if len(changes) != 1 {
 		t.Errorf("expected 1 recent change, got %d", len(changes))
-	}
-}
-
-func TestQueryDocumentation(t *testing.T) {
-	mock := &mockSearcher{results: []search.Result{{
-		ID:        "doc-1",
-		ProjectID: "proj",
-		Path:      "/docs/README.md",
-		Language:  "markdown",
-		Symbol:    "",
-		Score:     0.95,
-		Content:   "docs",
-	}}}
-	srv := New(mock, nil, nil, nil, nil)
-	res, err := srv.queryDocumentation(context.Background(), mcp.CallToolRequest{}, queryDocumentationArgs{Query: "how to run"})
-	if err != nil {
-		t.Fatalf("queryDocumentation: %v", err)
-	}
-	items := extractResultItems(t, res)
-	if len(items) != 1 || items[0].Language != "markdown" {
-		t.Errorf("unexpected documentation results: %+v", items)
 	}
 }
 

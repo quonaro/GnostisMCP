@@ -7,7 +7,6 @@
   import ProjectAddModal from './components/ProjectAddModal.svelte'
   import Toast from './components/ui/Toast.svelte'
   import JobQueue from './components/JobQueue.svelte'
-  import SystemMetricsCard from './components/SystemMetricsCard.svelte'
   import GraphView from './components/GraphView.svelte'
   import ArchitectureView from './components/ArchitectureView.svelte'
   import DeadCodeView from './components/DeadCodeView.svelte'
@@ -66,7 +65,6 @@
           <div class="lg:col-span-1 space-y-4">
             <JobQueue />
             <MemoryCard />
-            <SystemMetricsCard />
           </div>
         </div>
       {:else if section === 'graph'}

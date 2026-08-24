@@ -10,9 +10,8 @@ type Config struct {
 	Web             Web
 }
 
-// Embeddings configures the embedding provider.
+// Embeddings configures the OpenAI-compatible embedding endpoint.
 type Embeddings struct {
-	Provider  string
 	URL       string
 	Model     string
 	APIKey    string
@@ -31,10 +30,9 @@ type ProviderConfig struct {
 	MinUserMessageLength int
 }
 
-// Web configures the optional HTTP dashboard server.
+// Web configures the HTTP dashboard server.
 type Web struct {
-	Enabled bool
-	Port    int
+	Port int
 }
 
 // Directory configures a single indexed project.
@@ -52,11 +50,9 @@ const (
 	defaultDataDir              = "${HOME}/.gnostis/data"
 	DefaultProjectsDir          = "${HOME}/.gnostis/projects"
 	DefaultMemoryDataDir        = "${HOME}/.gnostis/data/memory"
-	defaultProvider             = "ollama"
-	defaultURL                  = "http://localhost:11434/v1"
-	defaultModel                = "nomic-embed-text"
+	defaultURL                  = "http://localhost:7997/v1"
+	defaultModel                = "BAAI/bge-small-en-v1.5"
 	defaultBatchSize            = 32
-	defaultWebEnabled           = true
 	defaultWebPort              = 7878
 	defaultMinUserMessageLength = 10
 )

@@ -59,7 +59,7 @@ func TestMemoryWrite_WritesAndIndexes(t *testing.T) {
 
 	res, err := srv.memoryWrite(context.Background(), mcp.CallToolRequest{}, memoryWriteArgs{
 		Title:   "Important Decision",
-		Content: "Use Ollama for embeddings.",
+		Content: "Use Infinity for embeddings.",
 		Tags:    []string{"embedding", "decision"},
 	})
 	if err != nil {
@@ -81,7 +81,7 @@ func TestMemoryWrite_WritesAndIndexes(t *testing.T) {
 	if !strings.Contains(string(content), "Important Decision") {
 		t.Errorf("note does not contain title")
 	}
-	if !strings.Contains(string(content), "Use Ollama for embeddings.") {
+	if !strings.Contains(string(content), "Use Infinity for embeddings.") {
 		t.Errorf("note does not contain content")
 	}
 

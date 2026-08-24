@@ -14,15 +14,6 @@ import (
 	"github.com/quonaro/gnostis/internal/symbol"
 )
 
-type searchCodebaseArgs struct {
-	Query          string  `json:"query"`
-	Project        string  `json:"project"`
-	Path           string  `json:"path"`
-	Language       string  `json:"language"`
-	TopK           float64 `json:"top_k"`
-	IncludeContent bool    `json:"include_content"`
-}
-
 type findSymbolArgs struct {
 	Name     string `json:"name"`
 	Project  string `json:"project"`
@@ -48,66 +39,6 @@ type searchResultItem struct {
 	EndLine   int     `json:"end_line"`
 	Score     float32 `json:"score"`
 	Content   string  `json:"content,omitempty"`
-}
-
-func (s *Server) searchCodebase(ctx context.Context, request mcp.CallToolRequest, args searchCodebaseArgs) (*mcp.CallToolResult, error) {
-	slog.InfoContext(ctx, "mcp tool call", "tool", "search_codebase", "query", args.Query, "project", args.Project, "path", args.Path, "language", args.Language)
-	if args.Query == "" {
-		return toolError(errReasonInvalidArgument, "query is required", "provide a non-empty search query"), nil
-	}
-
-	filters := map[string]string{}
-	if args.Project != "" {
-		filters["project_id"] = args.Project
-	}
-	if args.Language != "" {
-		filters["language"] = strings.ToLower(args.Language)
-	}
-
-	if args.Path != "" {
-		prefix, err := s.resolvePathOrAbsolute(args.Project, args.Path)
-		if err != nil {
-			return toolErrorFromResolvePath(err), nil
-		}
-		filters["path"] = prefix
-	}
-
-	topK := int(args.TopK)
-	if topK <= 0 {
-		topK = 10
-	}
-
-	results, err := s.engine.Search(ctx, args.Query, filters, topK)
-	if err != nil {
-		slog.ErrorContext(ctx, "search_codebase failed", "query", args.Query, "error", err)
-		return toolError(errReasonSearchFailed, err.Error(), "try again later or check the index status"), nil
-	}
-	slog.DebugContext(ctx, "search_codebase results", "count", len(results))
-
-	items := make([]searchResultItem, len(results))
-	for i, r := range results {
-		items[i] = searchResultItem{
-			ID:        r.ID,
-			ProjectID: r.ProjectID,
-			Path:      r.Path,
-			Language:  r.Language,
-			Symbol:    r.Symbol,
-			Signature: r.Signature,
-			StartLine: r.StartLine,
-			EndLine:   r.EndLine,
-			Score:     r.Score,
-		}
-		if args.IncludeContent {
-			items[i].Content = r.Content
-		}
-	}
-
-	data, err := json.Marshal(items)
-	if err != nil {
-		return nil, fmt.Errorf("marshal results: %w", err)
-	}
-
-	return mcp.NewToolResultText(string(data)), nil
 }
 
 func (s *Server) findSymbol(ctx context.Context, request mcp.CallToolRequest, args findSymbolArgs) (*mcp.CallToolResult, error) {

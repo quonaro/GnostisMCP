@@ -73,14 +73,14 @@ type App struct {
 
 // New builds the application from configuration.
 func New(cfg config.Config) (*App, error) {
-	slog.Info("initializing app", "data_dir", cfg.DataDir, "provider", cfg.Embeddings.Provider, "model", cfg.Embeddings.Model)
+	slog.Info("initializing app", "data_dir", cfg.DataDir, "model", cfg.Embeddings.Model)
 
 	sqlDB, err := db.Open(filepath.Join(cfg.DataDir, "gnostis.db"))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
 	}
 
-	dirs, projects, err := resolveProjects(cfg, sqlDB)
+	dirs, projects, err := resolveProjects(sqlDB)
 	if err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("resolve projects: %w", err)
@@ -164,9 +164,7 @@ func New(cfg config.Config) (*App, error) {
 
 	a.watcher = a.newWatcher()
 
-	if cfg.Web.Enabled {
-		a.webSrv = web.New(a, engine, a.mcp.StreamableHTTPHandler())
-	}
+	a.webSrv = web.New(a.mcp.StreamableHTTPHandler(), a.mcp.WSHandler(a.mcp.DashboardHandlers()))
 
 	return a, nil
 }
@@ -252,35 +250,31 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	}()
 
-	if a.webSrv != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := a.webSrv.Start(ctx, a.cfg.Web.Port); err != nil && err != context.Canceled {
-				errCh <- fmt.Errorf("web server: %w", err)
-				cancel()
-			}
-		}()
-	}
-
-	if a.webSrv != nil {
-		// Web server is enabled: run stdio in background and block on
-		// OS signals so the app stays alive even when stdin is closed
-		// (e.g. under a task runner like lota dev).
-		go func() {
-			if err := a.mcp.StartStdio(ctx); err != nil && err != context.Canceled {
-				slog.WarnContext(ctx, "stdio server ended", "error", err)
-			}
-		}()
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		<-sigCh
-	} else {
-		// No web server: block on stdin as before.
-		if err := a.mcp.StartStdio(ctx); err != nil {
-			errCh <- fmt.Errorf("stdio server: %w", err)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := a.webSrv.Start(ctx, a.cfg.Web.Port); err != nil && err != context.Canceled {
+			errCh <- fmt.Errorf("web server: %w", err)
+			cancel()
 		}
-	}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		a.startStatusTicker(ctx)
+	}()
+
+	// Run stdio in background and block on OS signals so the app stays
+	// alive even when stdin is closed (e.g. under a task runner like lota dev).
+	go func() {
+		if err := a.mcp.StartStdio(ctx); err != nil && err != context.Canceled {
+			slog.WarnContext(ctx, "stdio server ended", "error", err)
+		}
+	}()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
 	cancel()
 
 	wg.Wait()

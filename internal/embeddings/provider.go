@@ -2,8 +2,6 @@ package embeddings
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/quonaro/gnostis/internal/config"
 )
@@ -16,13 +14,8 @@ type Provider interface {
 }
 
 // New creates a Provider from the embeddings configuration.
+// Any OpenAI-compatible /v1/embeddings endpoint works (Infinity, Ollama,
+// OpenAI, LocalAI, LM Studio, etc.).
 func New(cfg config.Embeddings) (Provider, error) {
-	switch strings.ToLower(cfg.Provider) {
-	case "ollama":
-		return newOpenAICompatible(cfg.URL, cfg.Model, "", cfg.BatchSize), nil
-	case "openai":
-		return newOpenAICompatible(cfg.URL, cfg.Model, cfg.APIKey, cfg.BatchSize), nil
-	default:
-		return nil, fmt.Errorf("unknown embeddings provider: %s", cfg.Provider)
-	}
+	return newOpenAICompatible(cfg.URL, cfg.Model, cfg.APIKey, cfg.BatchSize), nil
 }

@@ -204,7 +204,7 @@ func (a *App) ReloadConfig(ctx context.Context) error {
 	cfg.Embeddings = a.cfg.Embeddings
 	cfg.ProjectsDirPath = a.cfg.ProjectsDirPath
 
-	dirs, projects, err := resolveProjects(cfg, a.sqlDB)
+	dirs, projects, err := resolveProjects(a.sqlDB)
 	if err != nil {
 		return fmt.Errorf("resolve projects: %w", err)
 	}

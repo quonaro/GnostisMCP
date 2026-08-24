@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/quonaro/gnostis/internal/jobs"
 	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/stats"
@@ -16,16 +17,18 @@ import (
 type getIndexStatusArgs struct{}
 
 type indexStatusResult struct {
-	Projects     []string                 `json:"projects"`
-	TotalChunks  int                      `json:"total_chunks"`
-	Provider     string                   `json:"provider"`
-	Model        string                   `json:"model"`
-	Symbols      int                      `json:"symbols"`
-	Progress     progress.State           `json:"progress"`
-	ETA          string                   `json:"eta,omitempty"`
-	ETASeconds   int64                    `json:"eta_seconds,omitempty"`
-	ProjectStats map[string]stats.Project `json:"project_stats"`
-	MemoryStats  []memory.ProviderStat    `json:"memory_stats,omitempty"`
+	Projects       []string                 `json:"projects"`
+	TotalChunks    int                      `json:"total_chunks"`
+	Provider       string                   `json:"provider"`
+	Model          string                   `json:"model"`
+	Symbols        int                      `json:"symbols"`
+	Progress       progress.State           `json:"progress"`
+	ETA            string                   `json:"eta,omitempty"`
+	ETASeconds     int64                    `json:"eta_seconds,omitempty"`
+	ProjectStats   map[string]stats.Project `json:"project_stats"`
+	MemoryStats    []memory.ProviderStat    `json:"memory_stats,omitempty"`
+	MemoryProgress memory.ProgressState     `json:"memory_progress,omitempty"`
+	Jobs           []jobs.Job               `json:"jobs,omitempty"`
 }
 
 func getIndexStatusTool() mcp.Tool {
@@ -56,17 +59,21 @@ func (s *Server) getIndexStatus(ctx context.Context, request mcp.CallToolRequest
 	}
 
 	memStats := s.indexer.MemoryStats(ctx)
+	memProgress := s.indexer.MemoryProgressState()
+	jobList := s.indexer.Jobs()
 
 	eta := pstate.ETA()
 	result := indexStatusResult{
-		Projects:     projects,
-		TotalChunks:  chunks,
-		Provider:     provider,
-		Model:        model,
-		Symbols:      symbols,
-		Progress:     pstate,
-		ProjectStats: pst,
-		MemoryStats:  memStats,
+		Projects:       projects,
+		TotalChunks:    chunks,
+		Provider:       provider,
+		Model:          model,
+		Symbols:        symbols,
+		Progress:       pstate,
+		ProjectStats:   pst,
+		MemoryStats:    memStats,
+		MemoryProgress: memProgress,
+		Jobs:           jobList,
 	}
 	if eta > 0 {
 		result.ETA = eta.String()

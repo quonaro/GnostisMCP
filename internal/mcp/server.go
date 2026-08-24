@@ -11,6 +11,7 @@ import (
 
 	"github.com/quonaro/gnostis/internal/coverage"
 	"github.com/quonaro/gnostis/internal/graph"
+	"github.com/quonaro/gnostis/internal/jobs"
 	"github.com/quonaro/gnostis/internal/memory"
 	"github.com/quonaro/gnostis/internal/progress"
 	"github.com/quonaro/gnostis/internal/project"
@@ -52,6 +53,9 @@ type Indexer interface {
 	DeadCode(ctx context.Context, project, kind string, topK int) ([]graph.DeadCodeCandidate, error)
 	Architecture(ctx context.Context, project string) (*graph.Architecture, error)
 	FindSimilar(ctx context.Context, path, project string, threshold float64, topK int) ([]simhash.FileMatch, error)
+	GraphLayout(project string, connectedOnly bool, maxNodes int) (graph.LayoutResult, error)
+	MemoryFiles(ctx context.Context) []memory.FileInfo
+	Jobs() []jobs.Job
 }
 
 const serverName = "gnostis"
@@ -133,7 +137,6 @@ func (s *Server) StreamableHTTPHandler() http.Handler {
 
 func (s *Server) registerTools() {
 	slog.Info("registering mcp tools")
-	s.server.AddTool(searchCodebaseTool(), mcp.NewTypedToolHandler(s.searchCodebase))
 	s.server.AddTool(findSymbolTool(), mcp.NewTypedToolHandler(s.findSymbol))
 	s.server.AddTool(getFileContextTool(), mcp.NewTypedToolHandler(s.getFileContext))
 	s.server.AddTool(listProjectsTool(), mcp.NewTypedToolHandler(s.listProjects))
@@ -141,13 +144,8 @@ func (s *Server) registerTools() {
 	s.server.AddTool(listFilesTool(), mcp.NewTypedToolHandler(s.listFiles))
 	s.server.AddTool(directoryTreeTool(), mcp.NewTypedToolHandler(s.directoryTree))
 	s.server.AddTool(getRecentChangesTool(), mcp.NewTypedToolHandler(s.getRecentChanges))
-	s.server.AddTool(queryDocumentationTool(), mcp.NewTypedToolHandler(s.queryDocumentation))
 	s.server.AddTool(reindexFilesTool(), mcp.NewTypedToolHandler(s.reindexFiles))
 	s.server.AddTool(unifiedSearchTool(), mcp.NewTypedToolHandler(s.unifiedSearch))
-	s.server.AddTool(fsReadTool(), mcp.NewTypedToolHandler(s.fsRead))
-	s.server.AddTool(fsGrepTool(), mcp.NewTypedToolHandler(s.fsGrep))
-	s.server.AddTool(fsListTool(), mcp.NewTypedToolHandler(s.fsList))
-	s.server.AddTool(fsTreeTool(), mcp.NewTypedToolHandler(s.fsTree))
 	s.server.AddTool(getIndexStatusTool(), mcp.NewTypedToolHandler(s.getIndexStatus))
 	s.server.AddTool(getIndexJobTool(), mcp.NewTypedToolHandler(s.getIndexJob))
 	s.server.AddTool(rebuildProjectTool(), mcp.NewTypedToolHandler(s.rebuildProject))
@@ -166,18 +164,8 @@ func (s *Server) registerTools() {
 	s.server.AddTool(deadCodeTool(), mcp.NewTypedToolHandler(s.deadCode))
 	s.server.AddTool(getArchitectureTool(), mcp.NewTypedToolHandler(s.getArchitecture))
 	s.server.AddTool(findSimilarTool(), mcp.NewTypedToolHandler(s.findSimilar))
-}
-
-func searchCodebaseTool() mcp.Tool {
-	return mcp.NewTool("search_codebase",
-		mcp.WithDescription("Semantic search over indexed code and documentation"),
-		mcp.WithString("query", mcp.Required(), mcp.Description("Natural language search query")),
-		mcp.WithString("project", mcp.Description("Project name to restrict the search")),
-		mcp.WithString("path", mcp.Description("Absolute or project-relative path prefix to restrict the search")),
-		mcp.WithString("language", mcp.Description("Language filter, e.g. go, python, markdown")),
-		mcp.WithNumber("top_k", mcp.Description("Number of results"), mcp.DefaultNumber(10)),
-		mcp.WithBoolean("include_content", mcp.Description("Include full chunk text"), mcp.DefaultBool(true)),
-	)
+	s.server.AddTool(graphLayoutTool(), mcp.NewTypedToolHandler(s.graphLayout))
+	s.server.AddTool(memoryFilesTool(), mcp.NewTypedToolHandler(s.memoryFiles))
 }
 
 func findSymbolTool() mcp.Tool {

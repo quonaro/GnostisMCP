@@ -14,7 +14,7 @@ import (
 
 // resolveProjects loads project configs from SQLite and creates
 // directory/project pairs.
-func resolveProjects(cfg config.Config, database *db.DB) ([]directory.Directory, []project.Project, error) {
+func resolveProjects(database *db.DB) ([]directory.Directory, []project.Project, error) {
 	dirs, err := config.LoadProjectFiles(database)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load project files: %w", err)
